@@ -70,8 +70,7 @@ import net.runelite.client.util.Text;
 @PluginDescriptor(
 	name = "Slayer Task Speed",
 	description = "Tracks Slayer task kills per hour (KPH), XP rates, cannonball use and personal stats to estimate completion time",
-	tags = {"slayer", "task", "assignment", "kph", "kills", "xp", "experience", "eta", "timer", "speed", "tracker", "stats", "history", "average", "calculator", "estimate", "estimator", "cannon", "cannonballs", "supplies", "boss", "araxxor", "araxyte", "araxytes", "mortimer"},
-	enabledByDefault = false
+	tags = {"slayer", "task", "assignment", "kph", "kills", "xp", "experience", "eta", "timer", "speed", "tracker", "stats", "history", "average", "calculator", "estimate", "estimator", "cannon", "cannonballs", "supplies", "boss", "araxxor", "araxyte", "araxytes", "mortimer"}
 )
 @PluginDependency(SlayerPlugin.class)
 public class SlayerSpeedPlugin extends Plugin
