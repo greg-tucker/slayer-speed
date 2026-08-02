@@ -63,6 +63,8 @@ Effective KPH will drive the ETA. Literal KPH and Slayer XP/hour will be display
 - Pause timing while logged out.
 - Exclude long idle gaps using a configurable threshold, initially five minutes.
 - Keep task averages separate by task name and assigned location.
+- Keep materially different eligible monsters and bosses in separate encounter profiles without splitting identical NPC names by combat level.
+- Let the player select a profile before combat, while default Auto mode switches to the profile inferred from confirmed kills.
 - Save incomplete, cancelled, or skipped tasks in recent history but exclude them from historical averages.
 - Keep aggregate statistics and up to the latest 50 runs per task.
 - Keep all data local and account-specific; the MVP will not require a remote server.
@@ -98,12 +100,16 @@ SlayerSpeedPlugin
 |-- SlayerSpeedConfig
 |-- TaskTracker
 |-- KillAttributionService
+|-- EncounterProfileResolver
 |-- SlayerXpTracker
 |-- ActiveTimeTracker
 |-- TaskHistoryRepository
 |-- KphCalculator
 |-- SlayerSpeedPanel
 |-- SlayerSpeedOverlay
+|-- MortimerTaskChoiceParser
+|-- MortimerEstimateService
+|-- MortimerChoiceOverlay
 `-- model
     |-- ActiveTask
     |-- CandidateDeath
@@ -117,12 +123,17 @@ SlayerSpeedPlugin
 - `SlayerSpeedPlugin`: Plugin lifecycle, dependency injection, event subscriptions, and UI registration.
 - `TaskTracker`: Assignment state machine, task progress, task completion, and cancellation handling.
 - `KillAttributionService`: Correlate target deaths, XP changes, counter changes, and loot signals.
+- `EncounterProfileResolver`: Convert confirmed NPC names into stable task-scoped estimate profiles and group multi-form encounters.
 - `SlayerXpTracker`: Calculate positive Slayer XP deltas and attribute eligible XP to the active task.
 - `ActiveTimeTracker`: Accumulate active time while excluding logout and long idle periods.
 - `TaskHistoryRepository`: Load, migrate, save, reset, and cap account-specific history.
 - `KphCalculator`: Produce rates, ETA, averages, and confidence indicators.
 - `SlayerSpeedPanel`: Current task, history, sample size, and data-management controls.
+- `StoredStatsDebugFormatter`: Produce a copyable, read-only dump of exact persisted task/profile records and retained runs.
 - `SlayerSpeedOverlay`: Optional compact in-game statistics.
+- `MortimerTaskChoiceParser`: Read task names, base amount ranges, and flat quantity modifiers from Mortimer's dedicated choice interface.
+- `MortimerEstimateService`: Convert each offered amount range into personal effective-KPH time ranges without mixing encounter profiles.
+- `MortimerChoiceOverlay`: Experimental, read-only annotations on Mortimer's offer rows.
 
 ## 6. Task state machine
 
@@ -412,6 +423,7 @@ Add tooltips explaining that effective KPH measures task-counter progress and is
 - Overlay visibility and contents
 - Reset selected task
 - Reset all history
+- View and copy exact stored statistics for debugging
 
 Destructive reset actions must require confirmation.
 
@@ -427,6 +439,15 @@ Suggested MVP settings:
 - Minimum sample before current-rate blending, default ten units
 - Keep incomplete runs in history, default enabled
 - Maximum recent runs per task, default 50
+- Experimental Mortimer task-choice estimates, default disabled
+
+### Experimental Mortimer task choices
+
+When enabled, read Mortimer's dedicated Slayer task-choice interface and annotate each visible offer without changing its text, actions, or click behaviour. Parse the displayed minimum and maximum amount, then apply a flat `+/- Assigned` quantity Mortifier before calculating the preview.
+
+Use historical effective KPH because the offered quantities are task-counter units. Mortimer does not expose a location before selection, so aggregate saved locations for this preview only. Continue to keep materially different encounter profiles separate: an Araxyte offer can show independent regular Araxyte and Araxxor ranges. Show a clear no-data state when no completed history is available.
+
+The final assignment amount is rolled only after selection. The choice interface must therefore show a time range; after selection, the normal active-task overlay supplies the exact ETA.
 
 ## 15. Testing plan
 
@@ -444,6 +465,7 @@ Suggested MVP settings:
 - Candidate-death deduplication and expiry
 - Completed versus incomplete average inclusion
 - History caps and schema migrations
+- Mortimer choice parsing, quantity adjustments, task-name aliases, and separate encounter estimates
 - Corrupt persistence recovery
 
 ### Manual tests

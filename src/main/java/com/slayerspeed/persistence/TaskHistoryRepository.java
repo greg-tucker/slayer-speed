@@ -14,10 +14,12 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.inject.Inject;
+import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 
 @Slf4j
+@Singleton
 public class TaskHistoryRepository implements TaskHistoryStore
 {
 	private static final String DATA_KEY = "taskHistoryV1";

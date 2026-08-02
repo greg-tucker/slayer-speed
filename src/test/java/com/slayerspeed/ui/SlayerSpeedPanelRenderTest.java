@@ -13,9 +13,11 @@ import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import javax.imageio.ImageIO;
+import javax.swing.JButton;
 import javax.swing.SwingUtilities;
 import org.junit.Test;
 
@@ -30,7 +32,7 @@ public class SlayerSpeedPanelRenderTest
 		Files.createDirectories(output);
 		render(output.resolve("simple.png"), new SlayerSpeedConfig()
 		{
-		}, false, false);
+		}, false, false, false);
 		render(output.resolve("detailed.png"), new SlayerSpeedConfig()
 		{
 			@Override
@@ -38,24 +40,29 @@ public class SlayerSpeedPanelRenderTest
 			{
 				return SlayerSpeedDisplayMode.DETAILED;
 			}
-		}, true, true);
+		}, true, true, false);
+		render(output.resolve("manual.png"), new SlayerSpeedConfig()
+		{
+		}, true, false, true);
 		assertTrue(Files.size(output.resolve("simple.png")) > 0L);
 		assertTrue(Files.size(output.resolve("detailed.png")) > 0L);
+		assertTrue(Files.size(output.resolve("manual.png")) > 0L);
 	}
 
 	private static void render(Path output, SlayerSpeedConfig config, boolean historyAvailable,
-		boolean cannonRelevant) throws Exception
+		boolean cannonRelevant, boolean manualSelection) throws Exception
 	{
 		SwingUtilities.invokeAndWait(() ->
 		{
 			try
 			{
 				SlayerSpeedPanel panel = new SlayerSpeedPanel(() -> { }, () -> { },
-					(run, excluded) -> { }, run -> { }, config);
+					(run, excluded) -> { }, run -> { }, profileId -> { }, config);
+				assertTrue(hasNamedButton(panel, "storedStatsDebugButton"));
 				Collection<TaskStatistics> history = historyAvailable
 					? sampleHistory()
 					: Collections.emptyList();
-				panel.update(sampleModel(historyAvailable, cannonRelevant), history);
+				panel.update(sampleModel(historyAvailable, cannonRelevant, manualSelection), history);
 				int height = Math.max(720, panel.getPreferredSize().height);
 				panel.setSize(new Dimension(242, height));
 				layoutRecursively(panel);
@@ -72,9 +79,26 @@ public class SlayerSpeedPanelRenderTest
 		});
 	}
 
+	private static boolean hasNamedButton(Container container, String name)
+	{
+		for (Component component : container.getComponents())
+		{
+			if (component instanceof JButton && name.equals(component.getName()))
+			{
+				return true;
+			}
+			if (component instanceof Container && hasNamedButton((Container) component, name))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private static Collection<TaskStatistics> sampleHistory()
 	{
-		TaskStatistics statistics = new TaskStatistics("Araxytes", null);
+		TaskStatistics statistics = new TaskStatistics(
+			"Araxytes", null, "boss:araxxor", "Araxxor (boss)");
 		long completedAt = 1_775_000_000_000L;
 		for (int index = 0; index < 3; index++)
 		{
@@ -82,6 +106,8 @@ public class SlayerSpeedPanelRenderTest
 				"run-" + index,
 				"Araxytes",
 				null,
+				"boss:araxxor",
+				"Araxxor (boss)",
 				210 + index,
 				0,
 				true,
@@ -112,7 +138,8 @@ public class SlayerSpeedPanelRenderTest
 		}
 	}
 
-	private static SlayerSpeedViewModel sampleModel(boolean historyAvailable, boolean cannonRelevant)
+	private static SlayerSpeedViewModel sampleModel(
+		boolean historyAvailable, boolean cannonRelevant, boolean manualSelection)
 	{
 		return new SlayerSpeedViewModel(
 			true,
@@ -141,6 +168,16 @@ public class SlayerSpeedPanelRenderTest
 			cannonRelevant ? "7.3" : "--",
 			cannonRelevant ? "314" : "--",
 			cannonRelevant ? "88" : "--",
-			null);
+			null,
+			true,
+			historyAvailable ? "Araxxor (boss)" : "Araxytes (regular)",
+			manualSelection ? "Manual estimate for this task" : "Auto-detected from confirmed kills",
+			manualSelection ? "boss:araxxor" : EncounterProfileOption.AUTO_ID,
+			Arrays.asList(
+				new EncounterProfileOption(
+					EncounterProfileOption.AUTO_ID,
+					historyAvailable ? "Auto: Araxxor (boss)" : "Auto: Araxytes (regular)"),
+				new EncounterProfileOption("npc:araxyte", "Araxytes (regular)"),
+				new EncounterProfileOption("boss:araxxor", "Araxxor (boss)")));
 	}
 }

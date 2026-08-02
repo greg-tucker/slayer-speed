@@ -33,8 +33,22 @@ public class EncounterProfileResolver
 		add("blue dragons", "npc:brutal-blue-dragon", "Brutal blue dragons", "brutal blue dragon");
 		add("blue dragons", "boss:vorkath", "Vorkath (boss)", "vorkath");
 
+		add("aviansies", "npc:aviansie", "Aviansies (regular)", "aviansie");
+		add("aviansies", "boss:kreearra", "Kree'arra (boss)",
+			"kree'arra", "flight kilisa", "flockleader geerin", "wingman skree");
+
+		add("bears", "npc:bear", "Bears (regular)", "bear", "grizzly bear", "black bear");
+		add("bears", "boss:callisto", "Callisto (boss)", "callisto");
+		add("bears", "boss:artio", "Artio (boss)", "artio");
+
+		add("black demons", "npc:black-demon", "Black demons (regular)", "black demon");
+		add("black demons", "npc:demonic-gorilla", "Demonic gorillas", "demonic gorilla");
+		add("black demons", "boss:skotizo", "Skotizo (boss)", "skotizo");
+
 		add("dagannoth", "group:dagannoth", "Dagannoths (regular)", "dagannoth", "dagannoth spawn");
 		add("dagannoth", "boss:dagannoth-kings", "Dagannoth Kings (boss)",
+			"dagannoth rex", "dagannoth prime", "dagannoth supreme");
+		add("dagannoth kings", "boss:dagannoth-kings", "Dagannoth Kings",
 			"dagannoth rex", "dagannoth prime", "dagannoth supreme");
 
 		add("gargoyles", "npc:gargoyle", "Gargoyles (regular)", "gargoyle");
@@ -51,16 +65,28 @@ public class EncounterProfileResolver
 		add("hydras", "npc:hydra", "Hydras (regular)", "hydra");
 		add("hydras", "boss:alchemical-hydra", "Alchemical Hydra (boss)", "alchemical hydra");
 
-		add("kalphite", "group:kalphite", "Kalphites (regular)",
+		add("kalphites", "group:kalphite", "Kalphites (regular)",
 			"kalphite worker", "kalphite soldier", "kalphite guardian");
-		add("kalphite", "boss:kalphite-queen", "Kalphite Queen (boss)", "kalphite queen");
+		add("kalphites", "boss:kalphite-queen", "Kalphite Queen (boss)", "kalphite queen");
 
-		addKrakenTask("kraken");
-		addKrakenTask("krakens");
+		addKrakenTask("cave kraken");
 
 		add("smoke devils", "npc:smoke-devil", "Smoke devils (regular)", "smoke devil");
-		add("smoke devils", "boss:thermonuclear-smoke-devil", "Thermonuclear smoke devil (boss)",
+		add("smoke devils", "boss:thermonuclear-smoke-devil", "Thermonuclear (boss)",
 			"thermonuclear smoke devil");
+
+		add("hill giants", "npc:hill-giant", "Hill giants (regular)", "hill giant");
+		add("hill giants", "boss:obor", "Obor (boss)", "obor");
+		add("moss giants", "npc:moss-giant", "Moss giants (regular)", "moss giant");
+		add("moss giants", "boss:bryophyta", "Bryophyta (boss)", "bryophyta");
+		add("scorpions", "npc:scorpion", "Scorpions (regular)", "scorpion");
+		add("scorpions", "boss:scorpia", "Scorpia (boss)", "scorpia");
+		add("skeletons", "npc:skeleton", "Skeletons (regular)", "skeleton");
+		add("skeletons", "boss:vetion", "Vet'ion (boss)", "vet'ion");
+		add("skeletons", "boss:calvarion", "Calvar'ion (boss)", "calvar'ion");
+		add("tzhaar", "group:tzhaar", "TzHaar (regular)", "tzhaar-ket", "tzhaar-xil", "tzhaar-mej");
+		add("tzhaar", "boss:jad", "TzTok-Jad (boss)", "tztok-jad");
+		add("tzhaar", "boss:zuk", "TzKal-Zuk (boss)", "tzkal-zuk");
 
 		Collections.addAll(SUPERIOR_NAMES,
 			"choke devil", "night beast", "greater abyssal demon", "marble gargoyle",

@@ -28,5 +28,14 @@ public class TaskKeyTest
 			new TaskKey("Bloodvelds", "Slayer Tower"),
 			new TaskKey("Bloodvelds", "Stronghold Slayer Cave"));
 	}
-}
 
+	@Test
+	public void separatesEncounterProfilesWithoutUsingCombatLevel()
+	{
+		TaskKey regular = new TaskKey("Araxytes", null, "npc:araxyte");
+		TaskKey boss = new TaskKey("Araxytes", null, "boss:araxxor");
+
+		assertNotEquals(regular, boss);
+		assertEquals("araxytes|target:npc:araxyte", regular.asStorageKey());
+	}
+}

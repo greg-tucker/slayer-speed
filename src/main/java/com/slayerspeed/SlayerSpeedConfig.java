@@ -161,6 +161,18 @@ public interface SlayerSpeedConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "experimentalMortimerEstimates",
+		name = "Experimental Mortimer estimates",
+		description = "Show personal task-time ranges on Mortimer's task-choice screen; this experimental interface may change",
+		position = 4,
+		section = ESTIMATES_SECTION
+	)
+	default boolean experimentalMortimerEstimates()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "showRecentRuns",
 		name = "Show recent runs",
 		description = "Show individual task runs with exclude and delete controls",

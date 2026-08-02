@@ -20,6 +20,7 @@ import com.slayerspeed.tracking.TaskTracker;
 import com.slayerspeed.tracking.TaskUpdate;
 import com.slayerspeed.ui.SlayerSpeedIcon;
 import com.slayerspeed.ui.EncounterProfileOption;
+import com.slayerspeed.ui.MortimerChoiceOverlay;
 import com.slayerspeed.ui.SlayerSpeedOverlay;
 import com.slayerspeed.ui.SlayerSpeedPanel;
 import com.slayerspeed.ui.SlayerSpeedViewModel;
@@ -68,8 +69,8 @@ import net.runelite.client.util.Text;
 @Slf4j
 @PluginDescriptor(
 	name = "Slayer Task Speed",
-	description = "Learns your Slayer KPH, XP rates, cannonball usage, and task times to predict each assignment",
-	tags = {"slayer", "task", "assignment", "kph", "kills", "xp", "experience", "eta", "timer", "speed", "tracker", "cannon", "cannonballs", "supplies"},
+	description = "Learns separate Slayer KPH, XP, cannonball use, and task times for regular monsters and bosses",
+	tags = {"slayer", "task", "assignment", "kph", "kills", "xp", "experience", "eta", "timer", "speed", "tracker", "cannon", "cannonballs", "supplies", "boss", "mortimer"},
 	enabledByDefault = false
 )
 @PluginDependency(SlayerPlugin.class)
@@ -110,6 +111,9 @@ public class SlayerSpeedPlugin extends Plugin
 	private SlayerSpeedOverlay overlay;
 
 	@Inject
+	private MortimerChoiceOverlay mortimerChoiceOverlay;
+
+	@Inject
 	private OverlayManager overlayManager;
 
 	@Inject
@@ -142,6 +146,7 @@ public class SlayerSpeedPlugin extends Plugin
 			.build();
 		clientToolbar.addNavigation(navigationButton);
 		overlayManager.add(overlay);
+		overlayManager.add(mortimerChoiceOverlay);
 		ensureProfileLoaded();
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
@@ -160,6 +165,7 @@ public class SlayerSpeedPlugin extends Plugin
 		slayerXpTracker.reset();
 		cannonballTracker.clear();
 		overlayManager.remove(overlay);
+		overlayManager.remove(mortimerChoiceOverlay);
 		if (navigationButton != null)
 		{
 			clientToolbar.removeNavigation(navigationButton);
@@ -463,11 +469,13 @@ public class SlayerSpeedPlugin extends Plugin
 			SlayerSpeedViewModel currentView = viewModel;
 			Collection<TaskStatistics> history = new ArrayList<>(
 				historyRepository.allStatistics(config.separateByLocation()));
+			Collection<TaskStatistics> exactStoredHistory = new ArrayList<>(
+				historyRepository.allStatistics(true));
 			SwingUtilities.invokeLater(() ->
 			{
 				if (panel != null)
 				{
-					panel.update(currentView, history);
+					panel.update(currentView, history, exactStoredHistory);
 				}
 			});
 		}
@@ -738,13 +746,17 @@ public class SlayerSpeedPlugin extends Plugin
 		String taskName = run.getTaskLocation() == null || run.getTaskLocation().isEmpty()
 			? run.getTaskName()
 			: run.getTaskName() + " (" + run.getTaskLocation() + ")";
+		String encounterSummary = run.getEncounterProfileId().isEmpty()
+			? ""
+			: "<br>Estimate profile: " + run.getEncounterProfileName();
 		String cannonSummary = config.showCannonMetrics() && run.getCannonballsUsed() > 0
 			? "<br>Cannonballs: " + run.getCannonballsUsed()
 			: "";
 		return String.format(
-			"<html><b>%s complete%s</b><br>%s · %s task units/hr · %s XP/hr%s</html>",
+			"<html><b>%s complete%s</b>%s<br>%s · %s task units/hr · %s XP/hr%s</html>",
 			taskName,
 			personalBest ? " — New PB!" : "",
+			encounterSummary,
 			KphCalculator.formatDuration(OptionalDouble.of(run.getActiveMillis())),
 			KphCalculator.formatRate(KphCalculator.effectiveKph(
 				run.getTaskProgressUnits(), run.getActiveMillis())),

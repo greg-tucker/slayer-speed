@@ -34,6 +34,10 @@ public class SlayerSpeedOverlay extends OverlayPanel
 		boolean detailed = config.displayMode() == SlayerSpeedDisplayMode.DETAILED;
 		panelComponent.getChildren().clear();
 		panelComponent.getChildren().add(TitleComponent.builder().text(model.getTask()).build());
+		if (model.isEncounterSelectorRelevant())
+		{
+			panelComponent.getChildren().add(line("Estimate for", model.getEncounterProfileDisplay()));
+		}
 		panelComponent.getChildren().add(line("Remaining", model.getRemaining()));
 		if (!"--".equals(model.getEta()))
 		{

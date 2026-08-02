@@ -18,6 +18,7 @@ public class KillAttributionServiceTest
 
 		assertEquals(1, xp.getLiteralKills());
 		assertEquals(120, xp.getSlayerXp());
+		assertEquals("Bloodveld", xp.getConfirmedNpcNames().get(0));
 		assertEquals(0, progress.getLiteralKills());
 	}
 
@@ -135,6 +136,8 @@ public class KillAttributionServiceTest
 		AttributionResult secondLoot = service.onLoot(second, 1, 101);
 
 		assertEquals(2, progress.getLiteralKills());
+		assertEquals(2, progress.getConfirmedNpcNames().size());
+		assertEquals("Araxyte", progress.getConfirmedNpcNames().get(0));
 		assertEquals(0, firstLoot.getLiteralKills());
 		assertEquals(0, secondLoot.getLiteralKills());
 	}
