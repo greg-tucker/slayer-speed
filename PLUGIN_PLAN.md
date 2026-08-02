@@ -1,5 +1,7 @@
 # SlayerSpeed RuneLite Plugin Plan
 
+> Historical design notes from the initial build. The README describes the current plugin.
+
 ## 1. Product goal
 
 Build a RuneLite Plugin Hub plugin that records a player's performance only while they are completing an active Slayer assignment. The plugin will retain per-task history and use it to estimate how long future assignments will take.
@@ -423,7 +425,7 @@ Add tooltips explaining that effective KPH measures task-counter progress and is
 - Overlay visibility and contents
 - Reset selected task
 - Reset all history
-- View and copy exact stored statistics for debugging
+- View and copy stored task records
 
 Destructive reset actions must require confirmation.
 

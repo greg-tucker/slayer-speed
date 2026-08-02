@@ -26,7 +26,7 @@ public final class StoredStatsDebugFormatter
 			? Collections.emptyList()
 			: storedStatistics;
 		StringBuilder output = new StringBuilder();
-		output.append("Slayer Task Speed - stored statistics debug\n")
+		output.append("Slayer Task Speed - stored task data\n")
 			.append("Exact task/location/encounter records: ")
 			.append(records.size())
 			.append("\n\n");

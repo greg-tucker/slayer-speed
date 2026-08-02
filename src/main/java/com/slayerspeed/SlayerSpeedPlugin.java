@@ -69,8 +69,8 @@ import net.runelite.client.util.Text;
 @Slf4j
 @PluginDescriptor(
 	name = "Slayer Task Speed",
-	description = "Learns separate Slayer KPH, XP, cannonball use, and task times for regular monsters and bosses",
-	tags = {"slayer", "task", "assignment", "kph", "kills", "xp", "experience", "eta", "timer", "speed", "tracker", "cannon", "cannonballs", "supplies", "boss", "mortimer"},
+	description = "Tracks Slayer task kills per hour (KPH), XP rates, cannonball use and personal stats to estimate completion time",
+	tags = {"slayer", "task", "assignment", "kph", "kills", "xp", "experience", "eta", "timer", "speed", "tracker", "stats", "history", "average", "calculator", "estimate", "estimator", "cannon", "cannonballs", "supplies", "boss", "araxxor", "araxyte", "araxytes", "mortimer"},
 	enabledByDefault = false
 )
 @PluginDependency(SlayerPlugin.class)
@@ -140,7 +140,7 @@ public class SlayerSpeedPlugin extends Plugin
 			config);
 		navigationButton = NavigationButton.builder()
 			.tooltip("Slayer Task Speed")
-			.icon(SlayerSpeedIcon.create())
+			.icon(SlayerSpeedIcon.load())
 			.priority(7)
 			.panel(panel)
 			.build();

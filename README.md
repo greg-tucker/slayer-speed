@@ -1,60 +1,42 @@
 # Slayer Task Speed
 
-Slayer Task Speed is a RuneLite Plugin Hub plugin that learns your personal Slayer task speeds and cannonball usage. It tracks KPH and Slayer XP per hour, then estimates task duration and the cannonballs needed for your current assignment size. When one assignment can be completed with different monsters or a boss, each encounter keeps its own learned rate.
+Slayer Task Speed is a RuneLite plugin that estimates how long your current Slayer task will take. It learns from your own completed tasks, so the estimates reflect your gear, route and play style rather than a generic rate.
 
-## Metrics
+## What it tracks
 
-- **Monster KPH:** Confirmed physical task kills per hour.
-- **Effective KPH:** Slayer task-counter progress per hour.
-- **Slayer XP/hour:** Slayer XP correlated with task activity, including superior monsters and completion rewards.
-- **ETA:** Remaining task amount divided by estimated effective KPH, with seconds shown for short estimates.
-- **Cannonballs per Slayer kill:** Cannonballs consumed divided by confirmed physical task kills from cannon-using runs.
-- **Estimated task cannonballs:** Assignment size multiplied by your historical cannonballs per effective task unit.
+- **Kills/hr** — confirmed monster kills during the task.
+- **Task units/hr** — how quickly the Slayer task counter goes down. This is the rate used for ETA.
+- **Slayer XP/hr** — Slayer XP matched to task activity, including superior monsters.
+- **Cannon use** — average cannonballs per kill and an estimate for the current assignment.
 
-Effective KPH drives the ETA because bracelet effects can make one physical kill remove zero, one, or two task units.
+Kills and task units are kept separate because bracelets can make one kill remove zero, one or two points from the task counter.
 
 ## Features
 
-- Tracks only while a Slayer assignment is active.
-- Keeps literal kills, effective progress, and Slayer XP separate.
-- Reconciles simultaneous multicombat deaths as a batch and shows confirmed kills beside task units.
-- Tracks cannonball consumption without counting reloads, and estimates supplies for the current task size.
-- Uses RuneLite's Slayer service to identify the current assignment and eligible targets.
-- Keeps separate encounter profiles for materially different targets, such as regular Araxytes and Araxxor.
-- Offers an Auto/manual estimate selector for assignments with multiple known targets; Auto follows confirmed kills.
-- Groups same-name combat-level variants together, and explicitly groups encounters such as the Dagannoth Kings, Grotesque Guardians, and cannoned Kalphite variants.
-- Ignores superior monsters when choosing an encounter profile while still including their Slayer XP and task progress.
-- Excludes logged-out time and caps long idle gaps.
-- Stores weighted task history in the active RuneScape profile.
-- Separates location-specific assignments by default.
-- Shows current rates, historical confidence, ETA, and task history in a sidebar panel.
-- Separates live task performance from learned historical averages.
-- Uses a compact default view with an optional detailed mode.
-- Hides unavailable pace and irrelevant cannon rows instead of filling the panel with placeholders.
-- Compares the current pace with your personal average and shows an estimated finish time.
-- Shows a configurable completion summary with personal-best detection.
-- Lets you inspect dated task runs with assignment size and kill coverage, then exclude, restore, or delete them from an actions menu.
-- Provides a read-only **Debug stored stats** viewer with exact task, location, encounter-profile, aggregate, and retained-run values plus copy-all support.
-- Explains when it is still learning a new task speed instead of showing a misleading estimate.
-- Provides an optional in-game overlay.
-- Experimentally annotates Mortimer's two or three task choices with personal time ranges, including quantity Mortifiers and separate regular/boss estimates.
-- Retains incomplete runs without including them in completed-task averages.
-- Requires confirmation before deleting saved history.
+- Personal averages for each task, with optional location separation.
+- Separate rates for different ways of doing the same assignment, such as Araxytes and Araxxor.
+- Automatic encounter detection with a manual selector when more than one estimate is available.
+- Current ETA, expected finish time, pace comparison and completion summary.
+- Cannonball tracking that counts ammunition fired rather than cannon reloads.
+- Recent task history with controls to exclude or delete bad runs.
+- A compact sidebar and optional in-game overlay.
+- Experimental time estimates on Mortimer's task-choice screen. This is disabled by default.
 
-Configuration is grouped into Display, Estimates, Cannon, History, and Advanced sections. The monster estimate selector can be hidden independently without disabling automatic profile detection. The experimental Mortimer choice-screen estimates have their own toggle and are disabled by default. Cannon tracking and cannon metric display are separate options, and cannon rows appear only when relevant. The number of recent runs shown and the observation threshold used for live estimates are configurable.
+Only completed tasks are included in saved averages. Incomplete and replaced tasks remain visible in recent history but do not affect the estimate.
 
-## Data and privacy
+## Data storage
 
-SlayerSpeed has no server and makes no network requests. Task history is serialized through RuneLite's account-specific profile configuration. It contains task names, locations, encounter profile names, kill and progress counts, XP totals, cannonballs used, active durations, timestamps, and completion status. History created before encounter profiles is retained as **Older mixed data** rather than being guessed as regular or boss history.
+Task history is stored in RuneLite's account-specific profile data. The plugin has no server and does not make network requests.
+
+Saved data includes task names, locations, encounter types, kills, task progress, Slayer XP, cannonballs, active time and timestamps. The **View stored stats** window in the sidebar can be used to inspect or copy the raw records.
+
+History from older plugin versions is kept as **Older mixed data** when it cannot be safely assigned to a particular monster or boss.
 
 ## Development
 
-Requirements:
+The project uses Java 11 and includes a Gradle wrapper.
 
-- Java 11-compatible source
-- The Gradle wrapper included in this repository
-
-Run the automated tests:
+Run the tests:
 
 ```powershell
 .\gradlew.bat test
@@ -66,38 +48,14 @@ Launch the RuneLite development client:
 .\gradlew.bat run
 ```
 
-Jagex Account users should follow RuneLite's [development-client login instructions](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
+If you use a Jagex Account, follow RuneLite's [development-client login instructions](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
 
-## Manual test checklist
+## Notes
 
-Before release, verify with the player controlling the client:
-
-1. Start a normal Slayer assignment and confirm it appears in the panel.
-2. Complete several kills and compare the task counter, literal kills, and Slayer XP.
-3. Test an expeditious bracelet activation: one literal kill should be separate from two effective units.
-4. Test a slaughter bracelet activation: one literal kill should be recorded even when task progress is zero.
-5. Log out, reconnect, and world hop without adding offline time or duplicating the run.
-6. Skip or replace a task and confirm it does not enter completed-task averages.
-7. Use an unrelated Slayer XP reward while a task is active and confirm it is not attributed without a matching target death.
-8. Fire and reload a cannon during a task. Confirm only fired ammunition is counted and the per-kill and task-size estimates update.
-9. Test thralls, multicombat, bursting, bosses, superiors, and simultaneous deaths.
-10. On an Araxyte task, switch between Auto, Araxytes, and Araxxor and confirm the ETA uses the selected history. Return to Auto and confirm a target kill selects the correct profile.
-11. Cannon Dagannoths of different combat levels and confirm they remain in one regular-Dagannoth profile.
-12. Restart the client and confirm history and the active checkpoint survive.
-13. Exercise current-task and all-history reset confirmations.
-14. Enable **Experimental Mortimer estimates**, open Mortimer's task choices, and confirm each row shows the correct personal time range or a clear no-data state. Check a quantity Mortifier and a task with regular/boss histories.
-15. Open **Debug stored stats**, confirm separate location/profile records are present, and test **Copy all**.
-
-## Known limitation
-
-Literal kill attribution reconciles simultaneous eligible deaths as a batch against Slayer task progress, then uses XP and loot evidence to recover kills whose progress was prevented by a bracelet. Shared kills that produce neither task progress, Slayer XP, nor matching loot remain intentionally uncounted. Effective KPH and ETA are tracked independently from literal attribution. If materially different encounter profiles are deliberately mixed within one assignment, Auto records the completed run under the profile with the most confirmed kills; selecting a profile manually overrides that choice for the current task.
-
-Mortimer displays an assignment range before selection, not the final rolled amount. His experimental overlay therefore shows a time range, adjusted for any quantity Mortifier. The normal exact ETA takes over after a task is selected. Mortimer does not provide a location with an offer, so preview estimates combine that task's saved locations while retaining separate encounter profiles.
-
-## Design documents
-
-- [Overall plugin plan](./PLUGIN_PLAN.md)
-- [Step-by-step implementation plan](./IMPLEMENTATION_PLAN.md)
+- Rates use active task time. Time before the first recorded activity is stored separately and is not included in KPH.
+- A shared kill may be missed when it produces no task progress, Slayer XP or matching loot.
+- If two different encounters are mixed in one assignment, Auto saves the run under the encounter with the most confirmed kills. A manual selection overrides this for the current task.
+- Mortimer shows an assignment range before the task is accepted, so its experimental estimate is also shown as a range.
 
 ## Licence
 

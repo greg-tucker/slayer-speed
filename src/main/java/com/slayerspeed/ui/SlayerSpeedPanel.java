@@ -221,9 +221,9 @@ public class SlayerSpeedPanel extends PluginPanel
 		add(historyPanel, BorderLayout.CENTER);
 
 		addGap(10);
-		JButton debugStoredStats = new JButton("Debug stored stats...");
+		JButton debugStoredStats = new JButton("View stored stats...");
 		debugStoredStats.setName("storedStatsDebugButton");
-		debugStoredStats.setToolTipText("View and copy every exact stored task, location, profile, and run record");
+		debugStoredStats.setToolTipText("View or copy saved task records");
 		debugStoredStats.setAlignmentX(CENTER_ALIGNMENT);
 		debugStoredStats.addActionListener(event -> showStoredStatsDebug());
 		add(debugStoredStats);
@@ -564,7 +564,7 @@ public class SlayerSpeedPanel extends PluginPanel
 		});
 		JPanel actions = new JPanel(new BorderLayout());
 		actions.setBackground(ColorScheme.DARK_GRAY_COLOR);
-		JLabel readOnlyNote = new JLabel("Read-only exact stored records");
+		JLabel readOnlyNote = new JLabel("Read-only saved task records");
 		readOnlyNote.setForeground(Color.LIGHT_GRAY);
 		actions.add(readOnlyNote, BorderLayout.WEST);
 		actions.add(copyAll, BorderLayout.EAST);
@@ -575,7 +575,7 @@ public class SlayerSpeedPanel extends PluginPanel
 		JOptionPane.showMessageDialog(
 			this,
 			content,
-			"Stored stats debug",
+			"Stored task stats",
 			JOptionPane.INFORMATION_MESSAGE);
 	}
 

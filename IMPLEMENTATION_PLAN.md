@@ -1,5 +1,7 @@
 # SlayerSpeed Step-by-Step Implementation Plan
 
+> Historical implementation notes from the initial build. Some details have changed since these steps were written.
+
 This plan converts the overall design in [PLUGIN_PLAN.md](./PLUGIN_PLAN.md) into an ordered development sequence. Complete and verify each step before moving to the next one.
 
 ## Target package and initial structure
@@ -49,7 +51,7 @@ src/test/java/com/slayerspeed/
 
 ```properties
 displayName=SlayerSpeed
-author=YOUR_NAME
+author=greg-tucker
 description=Tracks Slayer task KPH, Slayer XP per hour, and estimated completion time
 tags=slayer,kph,xp,task,eta,tracker
 plugins=com.slayerspeed.SlayerSpeedPlugin
