@@ -187,8 +187,8 @@ public interface SlayerSpeedConfig extends Config
 	@Range(min = 1, max = 10)
 	@ConfigItem(
 		keyName = "recentRunsShown",
-		name = "Recent runs shown",
-		description = "Number of individual runs shown below each task",
+		name = "Runs shown initially",
+		description = "Number of runs shown when task history is expanded; older retained runs remain available through Show all",
 		position = 2,
 		section = HISTORY_SECTION
 	)

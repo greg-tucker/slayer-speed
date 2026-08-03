@@ -42,13 +42,17 @@ import net.runelite.api.Actor;
 import net.runelite.api.Client;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.GameState;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.NPC;
 import net.runelite.api.Skill;
+import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.config.ConfigManager;
@@ -294,6 +298,19 @@ public class SlayerSpeedPlugin extends Plugin
 		cannonballTracker.observeLoaded(
 			event.getValue(),
 			config.trackCannonballs() && taskTracker.getActiveTask() != null);
+	}
+
+	@Subscribe
+	public void onMenuOptionClicked(MenuOptionClicked event)
+	{
+		String option = Text.removeTags(event.getMenuOption());
+		String target = Text.removeTags(event.getMenuTarget());
+		if ("Empty".equalsIgnoreCase(option)
+			&& target != null
+			&& target.toLowerCase(Locale.ENGLISH).contains("dwarf multicannon"))
+		{
+			cannonballTracker.beginEmptying(cannonballsInInventory(), client.getTickCount());
+		}
 	}
 
 	@Subscribe
@@ -817,11 +834,23 @@ public class SlayerSpeedPlugin extends Plugin
 				|| new TaskKey(active.getTaskName(), active.getTaskLocation()).equals(
 					new TaskKey(currentSnapshot.getTaskName(), currentSnapshot.getTaskLocation())));
 		int consumed = cannonballTracker.drainConsumed(
-			config.trackCannonballs() && assignmentMatches);
+			config.trackCannonballs() && assignmentMatches,
+			cannonballsInInventory(),
+			client.getTickCount());
 		if (consumed > 0)
 		{
 			taskTracker.applyCannonballsUsed(consumed, System.currentTimeMillis());
 		}
+	}
+
+	private int cannonballsInInventory()
+	{
+		ItemContainer inventory = client.getItemContainer(InventoryID.INV);
+		if (inventory == null)
+		{
+			return 0;
+		}
+		return inventory.count(ItemID.MCANNONBALL) + inventory.count(ItemID.GRANITE_CANNONBALL);
 	}
 
 	private static final class EncounterSelection

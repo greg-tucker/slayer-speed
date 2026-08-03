@@ -10,16 +10,21 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.LayoutManager;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.OptionalDouble;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -33,6 +38,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSeparator;
 import javax.swing.SwingConstants;
 import javax.swing.JTextArea;
 import net.runelite.client.ui.ColorScheme;
@@ -90,7 +96,9 @@ public class SlayerSpeedPanel extends PluginPanel
 	private final JLabel cannonRateLabel;
 	private final JLabel cannonTotalLabel;
 
-	private final JPanel historyPanel = new JPanel();
+	private final JPanel historyPanel = fullWidthBoxPanel(ColorScheme.DARK_GRAY_COLOR);
+	private final Set<String> expandedHistoryKeys = new HashSet<>();
+	private final Set<String> showAllHistoryKeys = new HashSet<>();
 	private long historySignature = Long.MIN_VALUE;
 	private List<TaskStatistics> storedStatistics = Collections.emptyList();
 
@@ -216,8 +224,6 @@ public class SlayerSpeedPanel extends PluginPanel
 		JLabel historyTitle = sectionTitle("Task history");
 		add(historyTitle);
 		addGap(5);
-		historyPanel.setLayout(new BoxLayout(historyPanel, BoxLayout.Y_AXIS));
-		historyPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		add(historyPanel, BorderLayout.CENTER);
 
 		addGap(10);
@@ -281,13 +287,16 @@ public class SlayerSpeedPanel extends PluginPanel
 		averageDurationValue.setText(model.getHistoricalAverageDuration());
 		averageKillsValue.setText(model.getHistoricalLiteralKph());
 		averageXpValue.setText(model.getHistoricalSlayerXpPerHour());
+		averageTitle.setText(model.isHistoryAvailable() ? "Your average" : "First estimate");
 		averageTitle.setVisible(model.isActive());
 		averageCard.setVisible(model.isActive() && model.isHistoryAvailable());
 		setMetricVisible(averageDurationLabel, averageDurationValue,
 			model.isHistoryAvailable() && !"--".equals(model.getHistoricalAverageDuration()));
 		setMetricVisible(averageKillsLabel, averageKillsValue, detailed && model.isHistoryAvailable());
 		setMetricVisible(averageXpLabel, averageXpValue, detailed && model.isHistoryAvailable());
-		historyMessageLabel.setText(model.getHistorySample());
+		historyMessageLabel.setText(model.isHistoryAvailable()
+			? model.getHistorySample()
+			: "<html><center>Complete this task to create<br>your first personal average.</center></html>");
 		historyMessageLabel.setVisible(model.isActive() && (!model.isHistoryAvailable() || detailed));
 		confidenceLabel.setText(model.isHistoryAvailable()
 			? "Confidence: " + model.getConfidence()
@@ -319,14 +328,23 @@ public class SlayerSpeedPanel extends PluginPanel
 			signature = 31L * signature + Objects.hash(
 				statistics.getTaskName(),
 				statistics.getTaskLocation(),
+				statistics.getEncounterProfileId(),
+				statistics.getEncounterProfileName(),
 				statistics.getLastUpdatedAtMillis(),
+				statistics.getTotalActualKills(),
 				statistics.getTotalTaskProgressUnits(),
+				statistics.getTotalSlayerXp(),
 				statistics.getTotalCannonballsUsed(),
-				statistics.getCompletedTaskCount());
+				statistics.getTotalActiveMillis(),
+				statistics.getTotalCompletedTaskMillis(),
+				statistics.getCompletedTaskCount(),
+				statistics.getRecentRuns().size());
 			for (TaskRun run : statistics.getRecentRuns())
 			{
 				signature = 31L * signature + Objects.hash(
-					run.getId(), run.getCompletedAtMillis(), run.getStatus(), run.isExcludedFromAverages());
+					run.getId(), run.getCompletedAtMillis(), run.getStatus(), run.isExcludedFromAverages(),
+					run.isFullTaskObserved(), run.getActualKills(), run.getTaskProgressUnits(),
+					run.getTotalSlayerXp(), run.getCannonballsUsed(), run.getActiveMillis());
 			}
 		}
 		if (signature != historySignature)
@@ -394,39 +412,120 @@ public class SlayerSpeedPanel extends PluginPanel
 	private void rebuildHistory(Collection<TaskStatistics> history)
 	{
 		historyPanel.removeAll();
+		Set<String> availableKeys = new HashSet<>();
 		if (history.isEmpty())
 		{
-			JLabel empty = new JLabel("No completed tasks yet.");
-			empty.setForeground(Color.GRAY);
-			historyPanel.add(empty);
+			historyPanel.add(createHistoryOnboarding());
 		}
 		else
 		{
 			for (TaskStatistics statistics : history)
 			{
-				historyPanel.add(createHistoryRow(statistics));
-				historyPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+				String historyKey = historyKey(statistics);
+				availableKeys.add(historyKey);
+				historyPanel.add(createHistoryCard(statistics, historyKey));
+				historyPanel.add(Box.createRigidArea(new Dimension(0, 6)));
 			}
 		}
+		expandedHistoryKeys.retainAll(availableKeys);
+		showAllHistoryKeys.retainAll(availableKeys);
 		historyPanel.revalidate();
 		historyPanel.repaint();
 	}
 
-	private JPanel createHistoryRow(TaskStatistics statistics)
+	private JPanel createHistoryOnboarding()
 	{
-		JPanel row = new JPanel();
-		row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
-		row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		row.setBorder(BorderFactory.createEmptyBorder(6, 7, 6, 7));
+		JPanel card = fullWidthBoxPanel(ColorScheme.DARKER_GRAY_COLOR);
+		card.setName("historyOnboarding");
+		card.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+		JLabel title = new JLabel("Getting started");
+		title.setForeground(Color.WHITE);
+		title.setFont(title.getFont().deriveFont(Font.BOLD));
+		card.add(leftTextRow(title, ColorScheme.DARKER_GRAY_COLOR));
+		card.add(Box.createRigidArea(new Dimension(0, 5)));
+
+		JLabel introduction = new JLabel(
+			"<html>Learns from your own Slayer tasks.<br>"
+				+ "Finish one task to unlock estimates.</html>");
+		introduction.setForeground(Color.LIGHT_GRAY);
+		card.add(leftTextRow(introduction, ColorScheme.DARKER_GRAY_COLOR));
+		card.add(Box.createRigidArea(new Dimension(0, 9)));
+
+		card.add(createOnboardingStep(1, "Start a Slayer task", "Tracking starts automatically."));
+		card.add(Box.createRigidArea(new Dimension(0, 7)));
+		card.add(createOnboardingStep(2, "Finish the task normally", "Only task activity is saved."));
+		card.add(Box.createRigidArea(new Dimension(0, 7)));
+		card.add(createOnboardingStep(3, "Use your personal estimates", "Rates improve with each task."));
+		card.add(Box.createRigidArea(new Dimension(0, 9)));
+
+		String historyHelp = config.showRecentRuns()
+			? "<html>Saved locally. Expand tasks for details.<br>"
+				+ "Exclude or delete runs when needed.</html>"
+			: "<html>Saved locally. Enable individual runs in<br>"
+				+ "plugin settings for review controls.</html>";
+		JLabel note = new JLabel(historyHelp);
+		note.setForeground(Color.GRAY);
+		note.setFont(note.getFont().deriveFont(Math.max(9f, note.getFont().getSize2D() - 1f)));
+		card.add(leftTextRow(note, ColorScheme.DARKER_GRAY_COLOR));
+		return card;
+	}
+
+	private static JPanel createOnboardingStep(int step, String titleText, String descriptionText)
+	{
+		JPanel row = fullWidthPanel(new BorderLayout(8, 0), ColorScheme.DARKER_GRAY_COLOR);
+		JLabel number = new JLabel(Integer.toString(step), SwingConstants.CENTER);
+		number.setOpaque(true);
+		number.setBackground(ColorScheme.MEDIUM_GRAY_COLOR);
+		number.setForeground(Color.WHITE);
+		number.setFont(number.getFont().deriveFont(Font.BOLD));
+		number.setPreferredSize(new Dimension(22, 22));
+		number.setMinimumSize(new Dimension(22, 22));
+		number.setMaximumSize(new Dimension(22, 22));
+		row.add(number, BorderLayout.WEST);
+
+		JPanel copy = fullWidthBoxPanel(ColorScheme.DARKER_GRAY_COLOR);
+		JLabel title = new JLabel(titleText);
+		title.setForeground(Color.WHITE);
+		title.setFont(title.getFont().deriveFont(Font.BOLD));
+		title.setAlignmentX(LEFT_ALIGNMENT);
+		copy.add(title);
+		JLabel description = new JLabel(descriptionText);
+		description.setForeground(Color.LIGHT_GRAY);
+		description.setAlignmentX(LEFT_ALIGNMENT);
+		copy.add(description);
+		row.add(copy, BorderLayout.CENTER);
+		return row;
+	}
+
+	private JPanel createHistoryCard(TaskStatistics statistics, String historyKey)
+	{
+		JPanel card = fullWidthBoxPanel(ColorScheme.DARKER_GRAY_COLOR);
+		card.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
 		String location = statistics.getTaskLocation();
 		String taskName = location == null || location.isEmpty()
 			? statistics.getTaskName()
 			: statistics.getTaskName() + " (" + location + ")";
 		String profileName = statistics.getEncounterProfileName();
-		JLabel name = new JLabel("<html>" + taskName + "<br>" + profileName + "</html>");
+
+		JPanel heading = fullWidthPanel(new BorderLayout(6, 0), ColorScheme.DARKER_GRAY_COLOR);
+		JPanel titles = fullWidthBoxPanel(ColorScheme.DARKER_GRAY_COLOR);
+		JLabel name = new JLabel(taskName);
 		name.setForeground(Color.WHITE);
-		row.add(name);
+		name.setFont(name.getFont().deriveFont(Font.BOLD));
+		name.setAlignmentX(LEFT_ALIGNMENT);
+		titles.add(name);
+		if (shouldShowProfileName(
+			statistics.getTaskName(), statistics.getEncounterProfileId(), profileName))
+		{
+			JLabel profile = new JLabel(profileName);
+			profile.setForeground(Color.GRAY);
+			profile.setFont(profile.getFont().deriveFont(Math.max(9f, profile.getFont().getSize2D() - 1f)));
+			profile.setAlignmentX(LEFT_ALIGNMENT);
+			titles.add(profile);
+		}
+		heading.add(titles, BorderLayout.CENTER);
 
 		OptionalDouble effective = KphCalculator.effectiveKph(
 			statistics.getTotalTaskProgressUnits(), statistics.getTotalActiveMillis());
@@ -437,65 +536,178 @@ public class SlayerSpeedPanel extends PluginPanel
 		OptionalDouble averageDuration = statistics.getCompletedTaskCount() > 0
 			? OptionalDouble.of((double) statistics.getTotalCompletedTaskMillis() / statistics.getCompletedTaskCount())
 			: OptionalDouble.empty();
-		String detailLine = config.displayMode() == SlayerSpeedDisplayMode.DETAILED
-			? String.format("<br>Kills/hr %s · XP/hr %s",
-				KphCalculator.formatRate(literal), KphCalculator.formatXpRate(xp))
-			: "";
-		JLabel rates = new JLabel(String.format(
-			"<html>Task units/hr %s · Avg time %s%s<br>%d full tasks · %d observed units</html>",
-			KphCalculator.formatRate(effective),
-			KphCalculator.formatDuration(averageDuration),
-			detailLine,
-			statistics.getCompletedTaskCount(),
-			statistics.getTotalTaskProgressUnits()));
-		rates.setForeground(Color.LIGHT_GRAY);
-		row.add(rates);
+
+		List<TaskRun> recentRuns = statistics.getRecentRuns();
+		JPanel runDetails = config.showRecentRuns() && !recentRuns.isEmpty()
+			? createRunDetails(statistics, historyKey, recentRuns)
+			: null;
+		if (runDetails != null)
+		{
+			boolean expanded = expandedHistoryKeys.contains(historyKey);
+			JButton toggle = new JButton(historyToggleText(recentRuns.size(), expanded));
+			toggle.setName("historyRunsToggle");
+			toggle.setToolTipText(expanded ? "Hide individual task runs" : "Show individual task runs");
+			toggle.setMargin(new Insets(2, 6, 2, 6));
+			toggle.addActionListener(event ->
+			{
+				boolean show = !runDetails.isVisible();
+				runDetails.setVisible(show);
+				if (show)
+				{
+					expandedHistoryKeys.add(historyKey);
+				}
+				else
+				{
+					expandedHistoryKeys.remove(historyKey);
+				}
+				toggle.setText(historyToggleText(recentRuns.size(), show));
+				toggle.setToolTipText(show ? "Hide individual task runs" : "Show individual task runs");
+				historyPanel.revalidate();
+				historyPanel.repaint();
+			});
+			heading.add(centeredButtonWrapper(toggle, ColorScheme.DARKER_GRAY_COLOR), BorderLayout.EAST);
+		}
+		card.add(heading);
+		card.add(Box.createRigidArea(new Dimension(0, 7)));
+
+		JPanel metrics = fullWidthPanel(new GridLayout(1, 2, 6, 0), ColorScheme.DARKER_GRAY_COLOR);
+		metrics.add(createHistoryMetric(
+			"KPH",
+			KphCalculator.formatRate(literal),
+			"Confirmed kills per active hour. Task units/hr: " + KphCalculator.formatRate(effective)));
+		metrics.add(createHistoryMetric(
+			"Slayer XP/hr",
+			KphCalculator.formatXpRate(xp),
+			"Average Slayer XP per active hour, including superior monsters"));
+		card.add(metrics);
+		card.add(Box.createRigidArea(new Dimension(0, 6)));
+
+		String taskCount = statistics.getCompletedTaskCount() == 1
+			? "1 full task"
+			: statistics.getCompletedTaskCount() + " full tasks";
+		JLabel sample = new JLabel(
+			"Avg " + KphCalculator.formatDuration(averageDuration) + " \u00B7 " + taskCount);
+		sample.setForeground(Color.LIGHT_GRAY);
+		sample.setToolTipText(statistics.getTotalTaskProgressUnits() + " observed task units");
+		card.add(leftTextRow(sample, ColorScheme.DARKER_GRAY_COLOR));
+
+		if (config.displayMode() == SlayerSpeedDisplayMode.DETAILED || ratesDiffer(literal, effective))
+		{
+			JLabel taskRate = new JLabel("Task units/hr " + KphCalculator.formatRate(effective));
+			taskRate.setForeground(Color.GRAY);
+			card.add(leftTextRow(taskRate, ColorScheme.DARKER_GRAY_COLOR));
+		}
 
 		if (config.showCannonMetrics() && statistics.getTotalCannonballsUsed() > 0)
 		{
 			OptionalDouble cannonballsPerKill = KphCalculator.cannonballsPerKill(
 				statistics.getTotalCannonballsUsed(), statistics.getTotalCannonRunActualKills());
-			JLabel cannon = new JLabel("Cannon average " + KphCalculator.formatRate(cannonballsPerKill) + "/kill");
-			cannon.setForeground(Color.LIGHT_GRAY);
-			row.add(cannon);
+			JLabel cannon = new JLabel("Cannon " + KphCalculator.formatRate(cannonballsPerKill) + "/kill");
+			cannon.setForeground(Color.GRAY);
+			card.add(leftTextRow(cannon, ColorScheme.DARKER_GRAY_COLOR));
 		}
 
-		if (config.showRecentRuns())
+		if (runDetails != null)
 		{
-			int shown = 0;
-			for (TaskRun run : statistics.getRecentRuns())
-			{
-				if (shown++ >= config.recentRunsShown())
-				{
-					break;
-				}
-				row.add(createRecentRunRow(run, statistics.isPersonalBest(run)));
-			}
+			runDetails.setVisible(expandedHistoryKeys.contains(historyKey));
+			card.add(runDetails);
 		}
-		return row;
+		return card;
+	}
+
+	private JPanel createRunDetails(
+		TaskStatistics statistics,
+		String historyKey,
+		List<TaskRun> recentRuns)
+	{
+		JPanel details = fullWidthBoxPanel(ColorScheme.DARKER_GRAY_COLOR);
+		details.setBorder(BorderFactory.createEmptyBorder(7, 0, 0, 0));
+		JSeparator separator = new JSeparator();
+		separator.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+		JPanel separatorRow = fullWidthPanel(new BorderLayout(), ColorScheme.DARKER_GRAY_COLOR);
+		separatorRow.add(separator, BorderLayout.CENTER);
+		details.add(separatorRow);
+		details.add(Box.createRigidArea(new Dimension(0, 6)));
+
+		JLabel title = new JLabel("Individual runs");
+		title.setForeground(Color.LIGHT_GRAY);
+		title.setFont(title.getFont().deriveFont(Font.BOLD));
+		details.add(leftTextRow(title, ColorScheme.DARKER_GRAY_COLOR));
+		details.add(Box.createRigidArea(new Dimension(0, 4)));
+
+		int initialLimit = Math.min(Math.max(1, config.recentRunsShown()), recentRuns.size());
+		boolean showAll = showAllHistoryKeys.contains(historyKey);
+		List<JPanel> runSlots = new ArrayList<>();
+		for (int index = 0; index < recentRuns.size(); index++)
+		{
+			TaskRun run = recentRuns.get(index);
+			JPanel slot = fullWidthPanel(new BorderLayout(), ColorScheme.DARKER_GRAY_COLOR);
+			slot.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
+			slot.add(createRecentRunRow(run, statistics.isPersonalBest(run)), BorderLayout.CENTER);
+			slot.setVisible(showAll || index < initialLimit);
+			runSlots.add(slot);
+			details.add(slot);
+		}
+
+		if (recentRuns.size() > initialLimit)
+		{
+			JButton showAllButton = new JButton();
+			showAllButton.setName("historyShowAllRuns");
+			showAllButton.setMargin(new Insets(2, 6, 2, 6));
+			updateShowAllButton(showAllButton, showAll, recentRuns.size() - initialLimit);
+			showAllButton.addActionListener(event ->
+			{
+				boolean showEveryRun = !showAllHistoryKeys.contains(historyKey);
+				if (showEveryRun)
+				{
+					showAllHistoryKeys.add(historyKey);
+				}
+				else
+				{
+					showAllHistoryKeys.remove(historyKey);
+				}
+				for (int index = initialLimit; index < runSlots.size(); index++)
+				{
+					runSlots.get(index).setVisible(showEveryRun);
+				}
+				updateShowAllButton(
+					showAllButton, showEveryRun, recentRuns.size() - initialLimit);
+				historyPanel.revalidate();
+				historyPanel.repaint();
+			});
+			details.add(centeredButtonWrapper(showAllButton, ColorScheme.DARKER_GRAY_COLOR));
+		}
+		return details;
 	}
 
 	private JPanel createRecentRunRow(TaskRun run, boolean personalBest)
 	{
-		JPanel row = new JPanel(new BorderLayout(4, 0));
-		row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		JPanel row = fullWidthPanel(new BorderLayout(6, 0), ColorScheme.DARK_GRAY_COLOR);
+		row.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 		String status = run.isExcludedFromAverages()
-			? "Excluded"
-			: run.getStatus().name().replace('_', ' ');
-		String best = personalBest ? " · PB" : "";
+			? "Excluded from averages"
+			: formatRunStatus(run);
+		String best = personalBest ? " \u00B7 PB" : "";
 		String cannon = config.showCannonMetrics() && run.getCannonballsUsed() > 0
-			? " · " + run.getCannonballsUsed() + " balls"
+			? " \u00B7 " + run.getCannonballsUsed() + " balls"
 			: "";
-		String assignment = run.getInitialAmount() > 0 ? " · " + run.getInitialAmount() + " assigned" : "";
+		String assignment = run.getInitialAmount() > 0
+			? " \u00B7 " + run.getInitialAmount() + " assigned"
+			: "";
 		String date = RUN_DATE_FORMAT.format(
 			Instant.ofEpochMilli(run.getCompletedAtMillis()).atZone(ZoneId.systemDefault()));
+		OptionalDouble runKph = KphCalculator.literalKph(run.getActualKills(), run.getActiveMillis());
+		OptionalDouble runXp = KphCalculator.slayerXpPerHour(run.getTotalSlayerXp(), run.getActiveMillis());
 		JLabel details = new JLabel(String.format(
-			"<html>%s%s<br>%s · %d kills / %d units<br>%s%s%s</html>",
+			"<html><b>%s%s</b><br>%s \u00B7 %d kills \u00B7 %d units"
+				+ "<br>KPH %s \u00B7 XP/hr %s<br>%s%s%s</html>",
 			date,
 			assignment,
 			KphCalculator.formatDuration(OptionalDouble.of(run.getActiveMillis())),
 			run.getActualKills(),
 			run.getTaskProgressUnits(),
+			KphCalculator.formatRate(runKph),
+			KphCalculator.formatXpRate(runXp),
 			status,
 			cannon,
 			best));
@@ -504,11 +716,112 @@ public class SlayerSpeedPanel extends PluginPanel
 		row.add(details, BorderLayout.CENTER);
 
 		JButton actions = new JButton("...");
+		actions.setName("historyRunActions");
 		actions.setToolTipText("Run actions");
-		actions.setMargin(new Insets(2, 6, 2, 6));
+		actions.setMargin(new Insets(1, 4, 1, 4));
+		actions.setPreferredSize(new Dimension(28, 24));
+		actions.setMinimumSize(new Dimension(28, 24));
+		actions.setMaximumSize(new Dimension(28, 24));
 		actions.addActionListener(event -> showRunActions(actions, run));
-		row.add(actions, BorderLayout.EAST);
+		row.add(centeredButtonWrapper(actions, ColorScheme.DARK_GRAY_COLOR), BorderLayout.EAST);
 		return row;
+	}
+
+	private static JPanel createHistoryMetric(String labelText, String valueText, String tooltip)
+	{
+		JPanel metric = fullWidthBoxPanel(ColorScheme.DARK_GRAY_COLOR);
+		metric.setBorder(BorderFactory.createEmptyBorder(5, 6, 5, 6));
+		JLabel label = new JLabel(labelText);
+		label.setForeground(Color.GRAY);
+		label.setFont(label.getFont().deriveFont(Math.max(9f, label.getFont().getSize2D() - 1f)));
+		label.setToolTipText(tooltip);
+		label.setAlignmentX(LEFT_ALIGNMENT);
+		metric.add(label);
+		JLabel value = new JLabel(valueText);
+		value.setForeground(Color.WHITE);
+		value.setFont(value.getFont().deriveFont(Font.BOLD));
+		value.setToolTipText(tooltip);
+		value.setAlignmentX(LEFT_ALIGNMENT);
+		metric.add(value);
+		return metric;
+	}
+
+	private static JPanel centeredButtonWrapper(JButton button, Color background)
+	{
+		JPanel wrapper = fullWidthPanel(new GridBagLayout(), background);
+		wrapper.add(button);
+		return wrapper;
+	}
+
+	private static JPanel leftTextRow(JLabel label, Color background)
+	{
+		JPanel row = fullWidthPanel(new BorderLayout(), background);
+		row.add(label, BorderLayout.WEST);
+		return row;
+	}
+
+	private static String historyKey(TaskStatistics statistics)
+	{
+		return nullToEmpty(statistics.getTaskName()) + '\u001F'
+			+ nullToEmpty(statistics.getTaskLocation()) + '\u001F'
+			+ nullToEmpty(statistics.getEncounterProfileId());
+	}
+
+	private static String nullToEmpty(String value)
+	{
+		return value == null ? "" : value;
+	}
+
+	private static String historyToggleText(int runCount, boolean expanded)
+	{
+		return expanded ? "Hide \u25BE" : "Runs (" + runCount + ") \u25B8";
+	}
+
+	private static void updateShowAllButton(JButton button, boolean showingAll, int hiddenCount)
+	{
+		button.setText(showingAll ? "Show fewer" : "Show " + hiddenCount + " older");
+		button.setToolTipText(showingAll
+			? "Return to the configured number of recent runs"
+			: "Show every retained run for this task");
+	}
+
+	private static boolean shouldShowProfileName(
+		String taskName,
+		String profileId,
+		String profileName)
+	{
+		if (profileId == null || profileId.isEmpty() || profileName == null || profileName.trim().isEmpty())
+		{
+			return false;
+		}
+		return !normalizeHistoryName(taskName).equals(normalizeHistoryName(profileName));
+	}
+
+	private static String normalizeHistoryName(String value)
+	{
+		String normalized = nullToEmpty(value).toLowerCase().replaceAll("[^a-z0-9]", "");
+		return normalized.endsWith("s") && normalized.length() > 1
+			? normalized.substring(0, normalized.length() - 1)
+			: normalized;
+	}
+
+	private static boolean ratesDiffer(OptionalDouble literal, OptionalDouble effective)
+	{
+		if (literal.isPresent() != effective.isPresent())
+		{
+			return true;
+		}
+		return literal.isPresent() && Math.abs(literal.getAsDouble() - effective.getAsDouble()) >= 0.05;
+	}
+
+	private static String formatRunStatus(TaskRun run)
+	{
+		if (run.getStatus() == TaskRunStatus.COMPLETED)
+		{
+			return run.isFullTaskObserved() ? "Completed" : "Completed (partial observation)";
+		}
+		String text = run.getStatus().name().toLowerCase().replace('_', ' ');
+		return Character.toUpperCase(text.charAt(0)) + text.substring(1);
 	}
 
 	private void showRunActions(JButton anchor, TaskRun run)
@@ -577,6 +890,39 @@ public class SlayerSpeedPanel extends PluginPanel
 			content,
 			"Stored task stats",
 			JOptionPane.INFORMATION_MESSAGE);
+	}
+
+	private static JPanel fullWidthPanel(LayoutManager layout, Color background)
+	{
+		JPanel panel = new JPanel(layout)
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				Dimension preferred = getPreferredSize();
+				return new Dimension(Integer.MAX_VALUE, preferred.height);
+			}
+		};
+		panel.setBackground(background);
+		panel.setAlignmentX(CENTER_ALIGNMENT);
+		return panel;
+	}
+
+	private static JPanel fullWidthBoxPanel(Color background)
+	{
+		JPanel panel = new JPanel()
+		{
+			@Override
+			public Dimension getMaximumSize()
+			{
+				Dimension preferred = getPreferredSize();
+				return new Dimension(Integer.MAX_VALUE, preferred.height);
+			}
+		};
+		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+		panel.setBackground(background);
+		panel.setAlignmentX(CENTER_ALIGNMENT);
+		return panel;
 	}
 
 	private static JPanel metricCard()
