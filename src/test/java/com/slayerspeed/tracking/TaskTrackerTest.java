@@ -132,7 +132,20 @@ public class TaskTrackerTest
 		assertEquals(12, ended.getEndedRun().getCannonballsUsed());
 	}
 
-	private static final class FakeStore implements TaskHistoryStore
+    @Test public void sameNameResetStartsSeparateRunWithoutCompletionClaim()
+    {
+        FakeStore store = new FakeStore();
+        TaskTracker tracker = new TaskTracker(store, new ActiveTimeTracker());
+        tracker.setSegmentedTiming(true);
+        tracker.observe(TaskSnapshot.active("Gargoyles", null, 100, 100), 1000, 5, true, 50);
+        tracker.observe(TaskSnapshot.active("Gargoyles", null, 100, 80), 61000, 5, true, 50);
+        TaskUpdate update = tracker.observe(TaskSnapshot.active("Gargoyles", null, 100, 100), 62000, 5, true, 50);
+        assertEquals(TaskRunStatus.REPLACED, update.getEndedRun().getStatus());
+        assertEquals(1, tracker.getActiveTask().getTimingPolicy());
+        assertEquals(0, tracker.getActiveTask().getTaskProgressUnits());
+    }
+
+    private static final class FakeStore implements TaskHistoryStore
 	{
 		private final List<TaskRun> runs = new ArrayList<>();
 		private ActiveTask checkpoint;

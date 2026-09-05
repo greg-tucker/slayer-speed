@@ -69,7 +69,26 @@ public class MortimerEstimateServiceTest
 		assertTrue(estimate.getProfiles().isEmpty());
 	}
 
-	private static TaskRun run(
+    @Test public void recentEstimatesShareTheSameNumericService()
+    {
+        TaskHistoryRepository repository = new TaskHistoryRepository(null, new Gson());
+        for (int i = 0; i < 7; i++)
+        {
+            repository.saveRun(run("run" + i, "Bloodveld", "npc:bloodveld", "Bloodveld",
+                i < 2 ? 1 : 100, 3600000L, i + 1), true, 50);
+        }
+        MortimerEstimateService service = new MortimerEstimateService(repository, new EncounterProfileResolver());
+        MortimerTaskEstimate estimate = service.estimate(
+            new MortimerTaskOffer("Bloodvelds", 100, 150, new Rectangle()),
+            com.slayerspeed.calculation.EstimateWindow.RECENT_5, 0);
+        assertEquals("1h-1h 30m", estimate.getProfiles().get(0).getDurationRange());
+        assertEquals("Legacy recent 5/5 eligible runs", estimate.getProfiles().get(0).getSourceDescription());
+        assertEquals("Legacy lifetime history (fallback)",
+            service.estimate(new MortimerTaskOffer("Bloodvelds", 100, 150, new Rectangle()),
+                com.slayerspeed.calculation.EstimateWindow.RECENT_5, 1).getProfiles().get(0).getSourceDescription());
+    }
+
+    private static TaskRun run(
 		String id,
 		String taskName,
 		String profileId,

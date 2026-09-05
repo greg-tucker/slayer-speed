@@ -1,61 +1,74 @@
 # Slayer Task Speed
 
-Slayer Task Speed is a RuneLite plugin that estimates how long your current Slayer task will take. It learns from your own completed tasks, so the estimates reflect your gear, route and play style rather than a generic rate.
+**How long will this Slayer task take?**
 
-## What it tracks
+Estimate remaining Slayer task time from your own pace. Get a live estimate during your first task, then build personal history for future assignments.
 
-- **Kills/hr** — confirmed monster kills during the task.
-- **Task units/hr** — how quickly the Slayer task counter goes down. This is the rate used for ETA.
-- **Slayer XP/hr** — Slayer XP matched to task activity, including superior monsters.
-- **Cannon use** — average cannonballs per kill and an estimate for the current assignment.
+- See your approximate remaining time and optional local finish time.
+- Compare your own monster and boss estimates without changing the current recording.
+- Review completed tasks, XP rates and cannonball estimates in one sidebar.
 
-Kills and task units are kept separate because bracelets can make one kill remove zero, one or two points from the task counter.
+The estimate uses tracked task activity. It does not predict future banking, travel or breaks.
 
-## Features
+## Install and start
 
-- Personal averages for each task, with optional location separation.
-- Separate rates for different ways of doing the same assignment, such as Araxytes and Araxxor.
-- Automatic encounter detection with a manual selector when more than one estimate is available.
-- Current ETA, expected finish time, pace comparison and completion summary.
-- Cannonball tracking that counts ammunition fired rather than cannon reloads.
-- Recent task history with controls to exclude or delete bad runs.
-- A compact sidebar and optional in-game overlay.
-- Experimental time estimates on Mortimer's task-choice screen. This is disabled by default.
+1. Open RuneLite's configuration sidebar and **Plugin Hub**.
+2. Search for **Slayer Task Speed** and install it.
+3. Open its sidebar icon and start a Slayer task. Tracking is automatic.
 
-Only completed tasks are included in saved averages. Incomplete and replaced tasks remain visible in recent history but do not affect the estimate.
+The source on this branch may contain improvements awaiting a Plugin Hub release.
 
-## Data storage
+No completed history is required for the first live estimate: it appears once timed task progress is available. **Blend live rate after** controls when live progress joins an existing historical estimate; it is not an unlock threshold.
 
-Task history is stored in RuneLite's account-specific profile data. The plugin has no server and does not make network requests.
+## Display and estimates
 
-Saved data includes task names, locations, encounter types, kills, task progress, Slayer XP, cannonballs, active time and timestamps. The **View stored stats** window in the sidebar can be used to inspect or copy the raw records.
+**Simple** emphasizes remaining count, ETA and the selected pace source. **Detailed** adds kill, task-progress and XP rates. Existing display settings remain configurable.
 
-History from older plugin versions is kept as **Older mixed data** when it cannot be safely assigned to a particular monster or boss.
+ETA follows the Slayer counter's progress, not physical kills. Bracelets can make one kill reduce that counter by zero, one or two units. Completed partial observations can inform rates; fully observed task durations are tracked separately. Lifetime history may contain older samples whose individual records have been pruned, so an exact lifetime sample count is not always available.
 
-## Development
+**Compare estimates** opens a read-only personal-history preview. **Record this task as** is an explicit whole-run encounter override; return to **Auto** to follow confirmed kills. Auto uses the encounter with the most confirmed kills when an assignment mixes encounters.
 
-The project uses Java 11 and includes a Gradle wrapper.
+Cannonball estimates describe ammunition expected to be fired. An **If using a cannon** estimate is a historical scenario, not an inventory stock count. Superior Slayer XP is included in XP rates.
 
-Run the tests:
+**Estimate history** offers Lifetime (the default), Recent 5, Recent 10 and Recent 25. Recent windows use only eligible retained runs after encounter, location and timing selection. The source shows how many are available; **Show estimate samples** in Compare lists the contributing records. Changing this setting does not change saved totals.
 
-```powershell
+**Experimental segmented timing** is off by default and applies to new assignments. It adds Pause/Resume and keeps matched timed samples separate from legacy history. Task activity resumes a pause automatically. When matching new-policy history is unavailable, a labelled **Legacy lifetime history (fallback)** estimate can appear; the two timing methods are never blended. See [the timing contract](./docs/TIMING_POLICY.md) for details.
+
+The last completion result stays available during your next task. Copy, dismiss or review it locally. Search history by assignment, encounter or location, or show only the current task.
+
+Mortimer's task-choice estimates remain experimental and disabled by default. Their range reflects assignment sizes, not a statistical confidence interval.
+
+## Your data
+
+History is stored in RuneLite's account-specific profile data. This plugin has no operated server and makes no network requests of its own.
+
+**Help & data** offers JSON export, full backups, reviewed imports, backup restore and Undo for a deleted run. Normal import preserves the active assignment; checkpoint recovery is a separate action. Merge is available only when retained records can reconstruct all totals, so old pruned history cannot be accidentally counted twice. Undo lasts 30 seconds and ends when history changes.
+
+Schema upgrades keep a pre-migration backup. Export important history before changing versions; older builds cannot read schema 6. See [recovery and rollback](./docs/RECOVERY_AND_ROLLBACK.md).
+
+**Help & data** also contains stored records and recovery controls. If history cannot be read, the original payload is preserved and the sidebar explains that new tracking is in memory only. Copy the original data before attempting recovery; changing accounts does not transfer that history.
+
+## Troubleshooting
+
+- **No active task:** make sure RuneLite has detected your current Slayer assignment; the plugin depends on RuneLite's Slayer plugin.
+- **Waiting for timed activity:** more than an assignment counter is needed to calculate a rate. Continue the task until timed activity is observed.
+- **An early estimate changes quickly:** it is based on a short live sample. The source label distinguishes this from saved history.
+- **Wrong encounter:** use the explicit recording selector only if you want to override the whole run. Use Compare for a hypothetical alternative.
+- **Unexpected task duration:** tracked time includes capped gaps between activity events. The historical default caps each such gap at five minutes. The finish clock assumes you continue at the estimated pace.
+- **Bad run:** expand its history and exclude it from averages. Include in averages reverses exclusion.
+
+## Development and validation
+
+Java 11 compilation target, Gradle wrapper, and RuneLite dependencies.
+
+~~~powershell
 .\gradlew.bat test
-```
-
-Launch the RuneLite development client:
-
-```powershell
 .\gradlew.bat run
-```
+~~~
 
-If you use a Jagex Account, follow RuneLite's [development-client login instructions](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
+Jagex Account users should follow RuneLite's [development-client login instructions](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
 
-## Notes
-
-- Rates use active task time. Time before the first recorded activity is stored separately and is not included in KPH.
-- A shared kill may be missed when it produces no task progress, Slayer XP or matching loot.
-- If two different encounters are mixed in one assignment, Auto saves the run under the encounter with the most confirmed kills. A manual selection overrides this for the current task.
-- Mortimer shows an assignment range before the task is accepted, so its experimental estimate is also shown as a range.
+See [implementation progress](./IMPLEMENTATION_PROGRESS.md) for the resumable work log and [implementation plan](./UX_IMPLEMENTATION_PLAN.md) for acceptance criteria. Synthetic UI fixtures are generated under build/ux-review; they are not gameplay screenshots. Real release captures and beta checks are tracked separately.
 
 ## Licence
 

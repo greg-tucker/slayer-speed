@@ -41,22 +41,23 @@ public class SlayerSpeedOverlay extends OverlayPanel
 		panelComponent.getChildren().add(line("Remaining", model.getRemaining()));
 		if (!"--".equals(model.getEta()))
 		{
-			panelComponent.getChildren().add(line("ETA", model.getEta()));
+			panelComponent.getChildren().add(line("ETA", "~" + model.getEta()));
 		}
-		if (config.showEstimatedFinishTime() && model.hasEstimatedFinishTime())
+        panelComponent.getChildren().add(line("", model.getEstimateDescription()));
+        if (config.showEstimatedFinishTime() && model.hasEstimatedFinishTime())
 		{
 			panelComponent.getChildren().add(line("Est. finish", model.getEstimatedFinishTime()));
 		}
-		if (!"--".equals(model.getCurrentLiteralKph()))
+		if (detailed && !"--".equals(model.getCurrentLiteralKph()))
 		{
 			panelComponent.getChildren().add(line("Kills/hr", model.getCurrentLiteralKph()));
 		}
-		if ((detailed || model.isCurrentRatesDiffer() || "--".equals(model.getCurrentLiteralKph()))
+		if (detailed
 			&& !"--".equals(model.getCurrentEffectiveKph()))
 		{
 			panelComponent.getChildren().add(line("Task units/hr", model.getCurrentEffectiveKph()));
 		}
-		if (!"--".equals(model.getCurrentSlayerXpPerHour()))
+		if (detailed && !"--".equals(model.getCurrentSlayerXpPerHour()))
 		{
 			panelComponent.getChildren().add(line("Slayer XP/hr", model.getCurrentSlayerXpPerHour()));
 		}
@@ -68,16 +69,16 @@ public class SlayerSpeedOverlay extends OverlayPanel
 				panelComponent.getChildren().add(line("Avg units/hr", model.getHistoricalEffectiveKph()));
 			}
 		}
-		if (config.showPaceComparison() && model.hasPaceComparison())
+		if (detailed && config.showPaceComparison() && model.hasPaceComparison())
 		{
 			panelComponent.getChildren().add(line("Vs. average", model.getPaceComparison()));
 		}
 		if (config.showCannonMetrics() && model.isCannonRelevant())
 		{
-			panelComponent.getChildren().add(line("Cannonballs used", model.getCannonballsUsed()));
+			if (detailed) { panelComponent.getChildren().add(line("Cannonballs used", model.getCannonballsUsed())); }
 			if (!"--".equals(model.getEstimatedRemainingCannonballs()))
 			{
-				panelComponent.getChildren().add(line("Est. balls left", model.getEstimatedRemainingCannonballs()));
+				panelComponent.getChildren().add(line("0".equals(model.getCannonballsUsed()) ? "If cannoning, need" : "Cannonballs needed", model.getEstimatedRemainingCannonballs()));
 			}
 			if (detailed && !"--".equals(model.getCannonballsPerKill()))
 			{

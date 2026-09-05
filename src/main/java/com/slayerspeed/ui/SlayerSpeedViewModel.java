@@ -1,12 +1,14 @@
 package com.slayerspeed.ui;
 
+import com.slayerspeed.calculation.TaskEstimate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 public final class SlayerSpeedViewModel
 {
-	private final boolean active;
+	private final TaskEstimate estimate;
+    private final boolean active;
 	private final String task;
 	private final String remaining;
 	private final String observedCounts;
@@ -106,6 +108,43 @@ public final class SlayerSpeedViewModel
 		String selectedEncounterOptionId,
 		List<EncounterProfileOption> encounterOptions)
 	{
+        this(active, task, remaining, observedCounts, currentLiteralKph, currentEffectiveKph, currentRatesDiffer, currentSlayerXpPerHour, eta, paceComparison, estimatedFinishTime, historyAvailable, historicalLiteralKph, historicalEffectiveKph, historicalSlayerXpPerHour, historicalAverageDuration, historySample, confidence, cannonRelevant, cannonballsUsed, cannonRateLabel, cannonballsPerKill, estimatedTotalCannonballs, estimatedRemainingCannonballs, completionSummary, encounterSelectorRelevant, encounterProfileDisplay, encounterSelectionNote, selectedEncounterOptionId, encounterOptions, null);
+    }
+
+    public SlayerSpeedViewModel(
+		boolean active,
+		String task,
+		String remaining,
+		String observedCounts,
+		String currentLiteralKph,
+		String currentEffectiveKph,
+		boolean currentRatesDiffer,
+		String currentSlayerXpPerHour,
+		String eta,
+		String paceComparison,
+		String estimatedFinishTime,
+		boolean historyAvailable,
+		String historicalLiteralKph,
+		String historicalEffectiveKph,
+		String historicalSlayerXpPerHour,
+		String historicalAverageDuration,
+		String historySample,
+		String confidence,
+		boolean cannonRelevant,
+		String cannonballsUsed,
+		String cannonRateLabel,
+		String cannonballsPerKill,
+		String estimatedTotalCannonballs,
+		String estimatedRemainingCannonballs,
+		String completionSummary,
+		boolean encounterSelectorRelevant,
+		String encounterProfileDisplay,
+		String encounterSelectionNote,
+		String selectedEncounterOptionId,
+		List<EncounterProfileOption> encounterOptions,
+        TaskEstimate estimate)
+	{
+		this.estimate = estimate;
 		this.active = active;
 		this.task = task;
 		this.remaining = remaining;
@@ -153,7 +192,15 @@ public final class SlayerSpeedViewModel
 			false, "0", "Average / kill", "--", "--", "--", completionSummary);
 	}
 
-	public boolean isActive()
+    public TaskEstimate getEstimate() { return estimate; }
+
+    public String getEstimateDescription()
+    {
+        return estimate == null ? ("--".equals(eta) ? "Waiting for timed task activity" : "Personal estimate")
+            : estimate.getDescription();
+    }
+
+    public boolean isActive()
 	{
 		return active;
 	}

@@ -5,7 +5,7 @@ import java.util.Map;
 
 public class SlayerSpeedData
 {
-	public static final int CURRENT_SCHEMA_VERSION = 5;
+	public static final int CURRENT_SCHEMA_VERSION = 6;
 
 	private int schemaVersion = CURRENT_SCHEMA_VERSION;
 	private Map<String, TaskStatistics> statisticsByTaskKey = new LinkedHashMap<>();
@@ -61,10 +61,16 @@ public class SlayerSpeedData
 			{
 				checkpointedActiveTask.migrateFromV4();
 			}
-			schemaVersion = CURRENT_SCHEMA_VERSION;
-			migrated = true;
-		}
-		return migrated;
+            schemaVersion = 5;
+            migrated = true;
+        }
+        if (schemaVersion == 5)
+        {
+            // Legacy keys/totals remain byte-for-byte meaningful; absent policy fields default to zero.
+            schemaVersion = 6;
+            migrated = true;
+        }
+        return migrated;
 	}
 
 	public Map<String, TaskStatistics> getStatisticsByTaskKey()

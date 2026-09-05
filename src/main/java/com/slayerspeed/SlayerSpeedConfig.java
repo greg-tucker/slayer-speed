@@ -200,8 +200,8 @@ public interface SlayerSpeedConfig extends Config
 	@Range(min = 1, max = 100)
 	@ConfigItem(
 		keyName = "currentRateMinimumUnits",
-		name = "Live estimate after",
-		description = "Progress units required before blending the current rate into ETA",
+		name = "Blend live rate after",
+		description = "Task progress before blending live and historical rates; a first-task live estimate can appear sooner",
 		position = 1,
 		section = ADVANCED_SECTION
 	)
@@ -246,4 +246,16 @@ public interface SlayerSpeedConfig extends Config
 	{
 		return true;
 	}
+    @ConfigItem(keyName = "estimateWindow", name = "Estimate history",
+        description = "Lifetime by default. Recent windows use only eligible retained runs; missing runs are shown, never filled from lifetime totals.",
+        position = 5, section = ESTIMATES_SECTION)
+    default com.slayerspeed.calculation.EstimateWindow estimateWindow()
+    {
+        return com.slayerspeed.calculation.EstimateWindow.LIFETIME;
+    }
+
+    @ConfigItem(keyName = "experimentalSegmentedTiming", name = "Experimental segmented timing",
+        description = "New tasks use matched timing intervals and manual pause. Kept separate from legacy history; requires live validation.",
+        position = 2, section = ADVANCED_SECTION)
+    default boolean experimentalSegmentedTiming() { return false; }
 }

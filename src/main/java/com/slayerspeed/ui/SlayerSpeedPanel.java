@@ -41,6 +41,8 @@ import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.SwingConstants;
 import javax.swing.JTextArea;
+import javax.swing.JProgressBar;
+import javax.swing.JDialog;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 
@@ -48,7 +50,27 @@ public class SlayerSpeedPanel extends PluginPanel
 {
 	private static final DateTimeFormatter RUN_DATE_FORMAT = DateTimeFormatter.ofPattern("d MMM HH:mm");
 
-	private final JLabel taskLabel = new JLabel("No active Slayer task", SwingConstants.CENTER);
+	private final JLabel storageStatus = new JLabel();
+    private String recoveryPayload;
+    private final JPanel completionActions = new JPanel(new GridLayout(0, 1, 0, 4));
+    private final JButton copyCompletion = new JButton("Copy result");
+    private final JButton reviewCompletion = new JButton("Review");
+    private final JButton dismissCompletion = new JButton("Dismiss");
+    private CompletionResult completionResult;
+    private Runnable dismissCompletionAction = () -> {};
+    public void setDismissCompletionAction(Runnable action) { dismissCompletionAction = action; }
+    public String getActionContext() { return previewContext; }
+    public void updateCompletion(CompletionResult result)
+    {
+        completionResult = result;
+        completionActions.setVisible(config.showCompletionSummary() && result != null);
+    }
+    private Consumer<String> dataActions = action -> {};
+    private boolean undoAvailable;
+
+    public void setDataActions(Consumer<String> actions) { dataActions = actions; }
+    public void setUndoAvailable(boolean available) { undoAvailable = available; }
+    private final JLabel taskLabel = new JLabel("No active Slayer task", SwingConstants.CENTER);
 	private final JLabel taskStatusLabel = new JLabel("", SwingConstants.CENTER);
 	private final JLabel completionSummaryLabel = new JLabel("", SwingConstants.CENTER);
 	private final JPanel encounterSection = new JPanel();
@@ -56,7 +78,23 @@ public class SlayerSpeedPanel extends PluginPanel
 	private final JLabel encounterNoteLabel = new JLabel("", SwingConstants.CENTER);
 	private boolean updatingEncounterSelector;
 
-	private final JPanel summaryCard = metricCard();
+	private final JLabel timingStatus = new JLabel();
+    private final JButton pauseButton = new JButton("Pause");
+    private Runnable pauseAction = () -> {};
+    public void setPauseAction(Runnable action) { pauseAction = action; }
+    public void updateTiming(String status, boolean enabled, boolean paused)
+    {
+        timingStatus.setText("<html><center>" + status + "</center></html>");
+        timingStatus.setVisible(!status.isEmpty());
+        pauseButton.setVisible(enabled);
+        pauseButton.setText(paused ? "Resume" : "Pause");
+    }
+
+    private final JProgressBar progress = new JProgressBar();
+    private JDialog previewDialog;
+    private String previewContext = "";
+    private int previewRemaining = 100;
+    private final JPanel summaryCard = metricCard();
 	private final JLabel remainingValue = valueLabel();
 	private final JLabel etaValue = valueLabel();
 	private final JLabel finishValue = valueLabel();
@@ -99,7 +137,21 @@ public class SlayerSpeedPanel extends PluginPanel
 	private final JPanel historyPanel = fullWidthBoxPanel(ColorScheme.DARK_GRAY_COLOR);
 	private final Set<String> expandedHistoryKeys = new HashSet<>();
 	private final Set<String> showAllHistoryKeys = new HashSet<>();
-	private long historySignature = Long.MIN_VALUE;
+    private final JPanel historyControls = fullWidthBoxPanel(ColorScheme.DARK_GRAY_COLOR);
+    private final javax.swing.JTextField historySearch = new javax.swing.JTextField();
+    private final javax.swing.JCheckBox currentTaskOnly = new javax.swing.JCheckBox("Current task only");
+    private final JComboBox<String> historySort = new JComboBox<>(new String[] {"Most recent", "Task name", "Fastest pace"});
+    private Collection<TaskStatistics> displayedHistory = Collections.emptyList();
+    private String activeHistoryTask = "";
+    public void updateHistoryContext(String taskName)
+    {
+        if (!Objects.equals(activeHistoryTask, taskName))
+        {
+            activeHistoryTask = taskName;
+            historySignature = Long.MIN_VALUE;
+        }
+    }
+    private long historySignature = Long.MIN_VALUE;
 	private List<TaskStatistics> storedStatistics = Collections.emptyList();
 
 	private final Runnable resetCurrentHistory;
@@ -128,26 +180,66 @@ public class SlayerSpeedPanel extends PluginPanel
 
 		taskLabel.setForeground(Color.WHITE);
 		taskLabel.setAlignmentX(CENTER_ALIGNMENT);
-		add(taskLabel);
+        storageStatus.setForeground(new Color(255, 190, 100));
+        storageStatus.setAlignmentX(CENTER_ALIGNMENT);
+        storageStatus.setVisible(false);
+        add(storageStatus);
+        add(taskLabel);
 		taskStatusLabel.setForeground(Color.LIGHT_GRAY);
 		taskStatusLabel.setAlignmentX(CENTER_ALIGNMENT);
 		add(taskStatusLabel);
 		completionSummaryLabel.setForeground(Color.LIGHT_GRAY);
 		completionSummaryLabel.setAlignmentX(CENTER_ALIGNMENT);
 		completionSummaryLabel.setVisible(false);
-		add(completionSummaryLabel);
+        add(completionSummaryLabel);
+        completionActions.add(copyCompletion);
+        completionActions.add(reviewCompletion);
+        completionActions.add(dismissCompletion);
+        reviewCompletion.addActionListener(event ->
+        {
+            if (completionResult == null) { return; }
+            currentTaskOnly.setSelected(false);
+            historySearch.setText("");
+            for (TaskStatistics stats : displayedHistory)
+            {
+                if (stats.getRecentRuns().stream().anyMatch(run -> run.getId().equals(completionResult.getRunId())))
+                {
+                    expandedHistoryKeys.add(historyKey(stats));
+                    showAllHistoryKeys.add(historyKey(stats));
+                    historySearch.setText(stats.getTaskName());
+                }
+            }
+            rebuildHistory(displayedHistory);
+            historyPanel.scrollRectToVisible(new java.awt.Rectangle(0, 0, historyPanel.getWidth(), 60));
+        });
+        completionActions.setVisible(false);
+        add(completionActions);
+        copyCompletion.addActionListener(event ->
+        {
+            if (completionResult != null)
+            {
+                try
+                {
+                    java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+                        new java.awt.datatransfer.StringSelection(completionResult.getText()), null);
+                    copyCompletion.setToolTipText("Result copied");
+                }
+                catch (IllegalStateException ex) { copyCompletion.setToolTipText("Clipboard busy — try again"); }
+            }
+        });
+        dismissCompletion.addActionListener(event -> dismissCompletionAction.run());
 
 		encounterSection.setLayout(new BoxLayout(encounterSection, BoxLayout.Y_AXIS));
 		encounterSection.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		encounterSection.setBorder(BorderFactory.createEmptyBorder(8, 0, 2, 0));
-		JLabel encounterTitle = sectionTitle("Estimate for");
+		JLabel encounterTitle = sectionTitle("Record this task as");
 		encounterTitle.setAlignmentX(CENTER_ALIGNMENT);
 		encounterSection.add(encounterTitle);
 		encounterSection.add(Box.createRigidArea(new Dimension(0, 3)));
 		encounterSelector.setAlignmentX(CENTER_ALIGNMENT);
 		encounterSelector.setMaximumSize(new Dimension(Integer.MAX_VALUE, encounterSelector.getPreferredSize().height));
 		encounterSelector.setToolTipText(
-			"Auto follows confirmed kills; choose a monster to preview or force that estimate for this task");
+			"Auto follows confirmed kills. A manual choice records the whole run under that encounter; use Compare for previews.");
 		encounterSelector.addActionListener(event ->
 		{
 			if (!updatingEncounterSelector)
@@ -170,8 +262,27 @@ public class SlayerSpeedPanel extends PluginPanel
 		addMetric(summaryCard, "Remaining", remainingValue, "Monsters or task units remaining");
 		addMetric(summaryCard, "ETA", etaValue, "Estimated time until the task finishes");
 		finishLabel = addMetric(summaryCard, "Est. finish", finishValue,
-			"Estimated local clock time when the task will finish");
-		add(summaryCard);
+			"If you continue at this estimated pace; future breaks are not forecast");
+        etaValue.setFont(etaValue.getFont().deriveFont(Font.BOLD, 19f));
+        add(summaryCard);
+        progress.setStringPainted(true);
+        progress.getAccessibleContext().setAccessibleName("Assignment progress");
+        progress.setVisible(false);
+        progress.setAlignmentX(CENTER_ALIGNMENT);
+        progress.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+        add(progress);
+        timingStatus.setAlignmentX(CENTER_ALIGNMENT);
+        timingStatus.setForeground(Color.LIGHT_GRAY);
+        add(timingStatus);
+        pauseButton.setAlignmentX(CENTER_ALIGNMENT);
+        pauseButton.setVisible(false);
+        pauseButton.addActionListener(event -> pauseAction.run());
+        add(pauseButton);
+        JButton compare = new JButton("Compare estimates...");
+        compare.setName("compareEstimates");
+        compare.setAlignmentX(CENTER_ALIGNMENT);
+        compare.addActionListener(event -> showPreview());
+        add(compare);
 
 		addGap(10);
 		add(currentTitle);
@@ -213,7 +324,7 @@ public class SlayerSpeedPanel extends PluginPanel
 			"Cannonballs fired during this assignment; reloads are not counted");
 		cannonRateLabel = addMetric(cannonCard, "Average / kill", cannonRateValue,
 			"Cannonballs consumed per confirmed Slayer kill");
-		addMetric(cannonCard, "Est. balls remaining", cannonRemainingValue,
+		addMetric(cannonCard, "Cannonballs needed", cannonRemainingValue,
 			"Estimated cannonballs needed for the remaining task units");
 		cannonTotalLabel = addMetric(cannonCard, "Est. total balls", cannonTotalValue,
 			"Estimated cannonballs for the full assignment size");
@@ -222,19 +333,37 @@ public class SlayerSpeedPanel extends PluginPanel
 		add(cannonSection);
 
 		JLabel historyTitle = sectionTitle("Task history");
-		add(historyTitle);
+        add(historyTitle);
+        historySearch.setName("historySearch");
+        historySearch.getAccessibleContext().setAccessibleName("Search task, encounter or location");
+        historySearch.setToolTipText("Search task, encounter or location");
+        historySearch.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        historySearch.putClientProperty("JTextField.placeholderText", "Search history");
+        JLabel searchLabel = new JLabel("Search history");
+        searchLabel.setForeground(Color.LIGHT_GRAY);
+        historyControls.add(searchLabel);
+        historyControls.add(historySearch);
+        currentTaskOnly.setAlignmentX(LEFT_ALIGNMENT);
+        currentTaskOnly.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+        historyControls.add(currentTaskOnly);
+        historySort.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        historyControls.add(historySort);
+        historyControls.setVisible(false);
+        add(historyControls);
+        historySearch.getDocument().addDocumentListener(new javax.swing.event.DocumentListener()
+        {
+            public void insertUpdate(javax.swing.event.DocumentEvent event) { rebuildHistory(displayedHistory); }
+            public void removeUpdate(javax.swing.event.DocumentEvent event) { rebuildHistory(displayedHistory); }
+            public void changedUpdate(javax.swing.event.DocumentEvent event) { rebuildHistory(displayedHistory); }
+        });
+        currentTaskOnly.addActionListener(event -> rebuildHistory(displayedHistory));
+        historySort.addActionListener(event -> rebuildHistory(displayedHistory));
 		addGap(5);
 		add(historyPanel, BorderLayout.CENTER);
 
 		addGap(10);
-		JButton debugStoredStats = new JButton("View stored stats...");
-		debugStoredStats.setName("storedStatsDebugButton");
-		debugStoredStats.setToolTipText("View or copy saved task records");
-		debugStoredStats.setAlignmentX(CENTER_ALIGNMENT);
-		debugStoredStats.addActionListener(event -> showStoredStatsDebug());
-		add(debugStoredStats);
-		addGap(6);
-		JButton dataManagement = new JButton("Data management...");
+
+		JButton dataManagement = new JButton("Help & data...");
 		dataManagement.setAlignmentX(CENTER_ALIGNMENT);
 		dataManagement.addActionListener(event -> showDataManagementMenu(dataManagement));
 		add(dataManagement);
@@ -256,11 +385,11 @@ public class SlayerSpeedPanel extends PluginPanel
 		boolean detailed = config.displayMode() == SlayerSpeedDisplayMode.DETAILED;
 		taskLabel.setText(model.getTask());
 		taskStatusLabel.setText(model.isActive() ? model.getObservedCounts() : "");
-		taskStatusLabel.setVisible(model.isActive());
+		taskStatusLabel.setVisible(detailed && model.isActive());
 		updateEncounterSelector(model);
 		summaryCard.setVisible(model.isActive());
 		remainingValue.setText(model.getRemaining());
-		etaValue.setText("--".equals(model.getEta()) ? "Learning" : model.getEta());
+		etaValue.setText("--".equals(model.getEta()) ? "Waiting" : "~" + model.getEta());
 		finishValue.setText(model.getEstimatedFinishTime());
 		setMetricVisible(finishLabel, finishValue,
 			config.showEstimatedFinishTime() && model.hasEstimatedFinishTime());
@@ -272,14 +401,14 @@ public class SlayerSpeedPanel extends PluginPanel
 		boolean hasCurrentRates = !"--".equals(model.getCurrentLiteralKph())
 			|| !"--".equals(model.getCurrentEffectiveKph())
 			|| !"--".equals(model.getCurrentSlayerXpPerHour());
-		currentTitle.setVisible(model.isActive() && hasCurrentRates);
-		currentCard.setVisible(model.isActive() && hasCurrentRates);
+		currentTitle.setVisible(detailed && model.isActive() && hasCurrentRates);
+		currentCard.setVisible(detailed && model.isActive() && hasCurrentRates);
 		setMetricVisible(currentKillsLabel, currentKillsValue, !"--".equals(model.getCurrentLiteralKph()));
 		setMetricVisible(currentUnitsLabel, currentUnitsValue,
 			!"--".equals(model.getCurrentEffectiveKph())
 				&& (detailed || model.isCurrentRatesDiffer() || "--".equals(model.getCurrentLiteralKph())));
 		setMetricVisible(currentXpLabel, currentXpValue, !"--".equals(model.getCurrentSlayerXpPerHour()));
-		xpNoteLabel.setVisible(model.isActive() && !"--".equals(model.getCurrentSlayerXpPerHour()));
+		xpNoteLabel.setVisible(detailed && model.isActive() && !"--".equals(model.getCurrentSlayerXpPerHour()));
 		setMetricVisible(paceLabel, paceValue,
 			config.showPaceComparison() && model.hasPaceComparison());
 
@@ -288,30 +417,27 @@ public class SlayerSpeedPanel extends PluginPanel
 		averageKillsValue.setText(model.getHistoricalLiteralKph());
 		averageXpValue.setText(model.getHistoricalSlayerXpPerHour());
 		averageTitle.setText(model.isHistoryAvailable() ? "Your average" : "First estimate");
-		averageTitle.setVisible(model.isActive());
-		averageCard.setVisible(model.isActive() && model.isHistoryAvailable());
+		averageTitle.setVisible(detailed && model.isActive());
+		averageCard.setVisible(detailed && model.isActive() && model.isHistoryAvailable());
 		setMetricVisible(averageDurationLabel, averageDurationValue,
 			model.isHistoryAvailable() && !"--".equals(model.getHistoricalAverageDuration()));
 		setMetricVisible(averageKillsLabel, averageKillsValue, detailed && model.isHistoryAvailable());
 		setMetricVisible(averageXpLabel, averageXpValue, detailed && model.isHistoryAvailable());
-		historyMessageLabel.setText(model.isHistoryAvailable()
-			? model.getHistorySample()
-			: "<html><center>Complete this task to create<br>your first personal average.</center></html>");
-		historyMessageLabel.setVisible(model.isActive() && (!model.isHistoryAvailable() || detailed));
-		confidenceLabel.setText(model.isHistoryAvailable()
-			? "Confidence: " + model.getConfidence()
-			: "");
-		confidenceLabel.setVisible(model.isActive() && model.isHistoryAvailable());
+		historyMessageLabel.setText(model.getHistorySample());
+		historyMessageLabel.setVisible(model.isActive() && detailed);
+		confidenceLabel.setText("<html><div style='width:150px;text-align:center'>" + model.getEstimateDescription() + "</div></html>");
+        confidenceLabel.setVisible(model.isActive());
 
 		boolean showCannon = config.showCannonMetrics() && model.isCannonRelevant();
 		cannonSection.setVisible(showCannon);
 		cannonUsedValue.setText(model.getCannonballsUsed());
+        cannonTitle.setText("0".equals(model.getCannonballsUsed()) ? "If using a cannon" : "Cannon");
 		cannonRateLabel.setText(model.getCannonRateLabel());
 		cannonRateValue.setText(model.getCannonballsPerKill());
 		cannonRemainingValue.setText(model.getEstimatedRemainingCannonballs());
 		cannonTotalValue.setText(model.getEstimatedTotalCannonballs());
 		setMetricVisible(cannonRateLabel, cannonRateValue,
-			showCannon && !"--".equals(model.getCannonballsPerKill()));
+			showCannon && detailed && !"--".equals(model.getCannonballsPerKill()));
 		setMetricVisible(cannonTotalLabel, cannonTotalValue,
 			showCannon && detailed && !"--".equals(model.getEstimatedTotalCannonballs()));
 
@@ -323,33 +449,11 @@ public class SlayerSpeedPanel extends PluginPanel
 
 		long signature = Objects.hash(
 			config.showRecentRuns(), config.recentRunsShown(), config.showCannonMetrics(), config.displayMode());
-		for (TaskStatistics statistics : history)
-		{
-			signature = 31L * signature + Objects.hash(
-				statistics.getTaskName(),
-				statistics.getTaskLocation(),
-				statistics.getEncounterProfileId(),
-				statistics.getEncounterProfileName(),
-				statistics.getLastUpdatedAtMillis(),
-				statistics.getTotalActualKills(),
-				statistics.getTotalTaskProgressUnits(),
-				statistics.getTotalSlayerXp(),
-				statistics.getTotalCannonballsUsed(),
-				statistics.getTotalActiveMillis(),
-				statistics.getTotalCompletedTaskMillis(),
-				statistics.getCompletedTaskCount(),
-				statistics.getRecentRuns().size());
-			for (TaskRun run : statistics.getRecentRuns())
-			{
-				signature = 31L * signature + Objects.hash(
-					run.getId(), run.getCompletedAtMillis(), run.getStatus(), run.isExcludedFromAverages(),
-					run.isFullTaskObserved(), run.getActualKills(), run.getTaskProgressUnits(),
-					run.getTotalSlayerXp(), run.getCannonballsUsed(), run.getActiveMillis());
-			}
-		}
-		if (signature != historySignature)
+
+		if (signature != historySignature || displayedHistory != history)
 		{
 			historySignature = signature;
+            displayedHistory = history;
 			rebuildHistory(history);
 		}
 	}
@@ -412,6 +516,7 @@ public class SlayerSpeedPanel extends PluginPanel
 	private void rebuildHistory(Collection<TaskStatistics> history)
 	{
 		historyPanel.removeAll();
+        historyControls.setVisible(!history.isEmpty());
 		Set<String> availableKeys = new HashSet<>();
 		if (history.isEmpty())
 		{
@@ -419,9 +524,29 @@ public class SlayerSpeedPanel extends PluginPanel
 		}
 		else
 		{
-			for (TaskStatistics statistics : history)
-			{
-				String historyKey = historyKey(statistics);
+            List<TaskStatistics> filtered = new ArrayList<>();
+            String query = historySearch.getText().trim().toLowerCase(java.util.Locale.ENGLISH);
+            for (TaskStatistics statistics : history)
+            {
+                availableKeys.add(historyKey(statistics));
+                String searchable = (statistics.getTaskName() + " " + statistics.getEncounterProfileName()
+                    + " " + Objects.toString(statistics.getTaskLocation(), "")).toLowerCase(java.util.Locale.ENGLISH);
+                if (searchable.contains(query) && (!currentTaskOnly.isSelected()
+                    || statistics.getTaskName().equalsIgnoreCase(activeHistoryTask))) { filtered.add(statistics); }
+            }
+            java.util.Comparator<TaskStatistics> order = java.util.Comparator
+                .comparingLong(TaskStatistics::getLastUpdatedAtMillis).reversed();
+            if (historySort.getSelectedIndex() == 1) { order = java.util.Comparator.comparing(TaskStatistics::getTaskName); }
+            if (historySort.getSelectedIndex() == 2)
+            {
+                order = java.util.Comparator.comparingDouble((TaskStatistics stats) ->
+                    KphCalculator.effectiveKph(stats.getTotalTaskProgressUnits(), stats.getTotalActiveMillis()).orElse(0)).reversed();
+            }
+            filtered.sort(order.thenComparing(SlayerSpeedPanel::historyKey));
+            if (filtered.isEmpty()) { historyPanel.add(new JLabel("No matching history")); }
+            for (TaskStatistics statistics : filtered)
+            {
+                String historyKey = historyKey(statistics);
 				availableKeys.add(historyKey);
 				historyPanel.add(createHistoryCard(statistics, historyKey));
 				historyPanel.add(Box.createRigidArea(new Dimension(0, 6)));
@@ -446,17 +571,16 @@ public class SlayerSpeedPanel extends PluginPanel
 		card.add(Box.createRigidArea(new Dimension(0, 5)));
 
 		JLabel introduction = new JLabel(
-			"<html>Learns from your own Slayer tasks.<br>"
-				+ "Finish one task to unlock estimates.</html>");
+			"<html><div style='width:145px'>Live estimates from your pace.<br>Personal history for next time.</div></html>");
 		introduction.setForeground(Color.LIGHT_GRAY);
 		card.add(leftTextRow(introduction, ColorScheme.DARKER_GRAY_COLOR));
 		card.add(Box.createRigidArea(new Dimension(0, 9)));
 
 		card.add(createOnboardingStep(1, "Start a Slayer task", "Tracking starts automatically."));
 		card.add(Box.createRigidArea(new Dimension(0, 7)));
-		card.add(createOnboardingStep(2, "Finish the task normally", "Only task activity is saved."));
+		card.add(createOnboardingStep(2, "See your live estimate", "Based on timed task activity."));
 		card.add(Box.createRigidArea(new Dimension(0, 7)));
-		card.add(createOnboardingStep(3, "Use your personal estimates", "Rates improve with each task."));
+		card.add(createOnboardingStep(3, "Build personal history", "Save your pace for next time."));
 		card.add(Box.createRigidArea(new Dimension(0, 9)));
 
 		String historyHelp = config.showRecentRuns()
@@ -485,12 +609,12 @@ public class SlayerSpeedPanel extends PluginPanel
 		row.add(number, BorderLayout.WEST);
 
 		JPanel copy = fullWidthBoxPanel(ColorScheme.DARKER_GRAY_COLOR);
-		JLabel title = new JLabel(titleText);
+		JLabel title = new JLabel("<html><div style='width:120px'>" + titleText + "</div></html>");
 		title.setForeground(Color.WHITE);
 		title.setFont(title.getFont().deriveFont(Font.BOLD));
 		title.setAlignmentX(LEFT_ALIGNMENT);
 		copy.add(title);
-		JLabel description = new JLabel(descriptionText);
+		JLabel description = new JLabel("<html><div style=\"width:120px\">" + descriptionText + "</div></html>");
 		description.setForeground(Color.LIGHT_GRAY);
 		description.setAlignmentX(LEFT_ALIGNMENT);
 		copy.add(description);
@@ -516,6 +640,9 @@ public class SlayerSpeedPanel extends PluginPanel
 		name.setFont(name.getFont().deriveFont(Font.BOLD));
 		name.setAlignmentX(LEFT_ALIGNMENT);
 		titles.add(name);
+        JLabel timing = new JLabel(statistics.getTimingPolicy() == 0 ? "Legacy timing" : "Segmented timing");
+        timing.setForeground(Color.GRAY);
+        titles.add(timing);
 		if (shouldShowProfileName(
 			statistics.getTaskName(), statistics.getEncounterProfileId(), profileName))
 		{
@@ -696,8 +823,8 @@ public class SlayerSpeedPanel extends PluginPanel
 			: "";
 		String date = RUN_DATE_FORMAT.format(
 			Instant.ofEpochMilli(run.getCompletedAtMillis()).atZone(ZoneId.systemDefault()));
-		OptionalDouble runKph = KphCalculator.literalKph(run.getActualKills(), run.getActiveMillis());
-		OptionalDouble runXp = KphCalculator.slayerXpPerHour(run.getTotalSlayerXp(), run.getActiveMillis());
+		OptionalDouble runKph = KphCalculator.literalKph(run.getRateActualKills(), run.getActiveMillis());
+		OptionalDouble runXp = KphCalculator.slayerXpPerHour(run.getRateSlayerXp(), run.getActiveMillis());
 		JLabel details = new JLabel(String.format(
 			"<html><b>%s%s</b><br>%s \u00B7 %d kills \u00B7 %d units"
 				+ "<br>KPH %s \u00B7 XP/hr %s<br>%s%s%s</html>",
@@ -764,7 +891,7 @@ public class SlayerSpeedPanel extends PluginPanel
 	{
 		return nullToEmpty(statistics.getTaskName()) + '\u001F'
 			+ nullToEmpty(statistics.getTaskLocation()) + '\u001F'
-			+ nullToEmpty(statistics.getEncounterProfileId());
+			+ nullToEmpty(statistics.getEncounterProfileId()) + ':' + statistics.getTimingPolicy();
 	}
 
 	private static String nullToEmpty(String value)
@@ -842,16 +969,82 @@ public class SlayerSpeedPanel extends PluginPanel
 		menu.show(anchor, 0, anchor.getHeight());
 	}
 
-	private void showDataManagementMenu(JButton anchor)
+    private void addDataAction(JPopupMenu menu, String label, String action)
+    {
+        JMenuItem item = new JMenuItem(label);
+        item.addActionListener(event -> dataActions.accept(action));
+        menu.add(item);
+    }
+
+    public void updateProgress(String context, int initial, int observedStart, int remaining)
+    {
+        if (!Objects.equals(previewContext, context))
+        {
+            if (previewDialog != null) { previewDialog.dispose(); previewDialog = null; }
+            previewContext = context;
+        }
+        previewRemaining = remaining > 0 ? remaining : 100;
+        progress.setVisible(initial > 0 && remaining >= 0 && remaining <= initial);
+        progress.setMaximum(Math.max(1, initial));
+        progress.setValue(Math.max(0, initial - remaining));
+        progress.setString(observedStart != initial
+            ? "Tracked since " + observedStart + " remaining"
+            : Math.max(0, initial - remaining) + " / " + initial + " task units");
+    }
+
+    private void showPreview()
+    {
+        JOptionPane pane = new JOptionPane(new TaskPreviewPanel(storedStatistics, previewRemaining, config.estimateWindow()),
+            JOptionPane.PLAIN_MESSAGE);
+        previewDialog = pane.createDialog(this, "Compare personal task estimates");
+        previewDialog.setModal(false);
+        previewDialog.setVisible(true);
+    }
+
+    public void updateStorageStatus(String message, String originalPayload)
+    {
+        recoveryPayload = originalPayload;
+        storageStatus.setText("<html><div style='width:210px'>" + message + "</div></html>");
+        storageStatus.setVisible(!message.isEmpty());
+    }
+
+    private void showDataManagementMenu(JButton anchor)
 	{
-		JPopupMenu menu = new JPopupMenu();
-		JMenuItem resetCurrent = new JMenuItem("Reset current task history...");
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem stored = new JMenuItem("View stored stats...");
+        stored.setName("storedStatsDebugButton");
+        stored.addActionListener(event -> showStoredStatsDebug());
+        menu.add(stored);
+        addDataAction(menu, "Export history...", "export");
+        addDataAction(menu, "Export recovery backup...", "exportBackup");
+        addDataAction(menu, "Import and replace history...", "replace");
+        addDataAction(menu, "Merge complete retained history...", "merge");
+        addDataAction(menu, "Restore last backup...", "backup");
+        addDataAction(menu, "Recover checkpoint from file...", "recoverCheckpoint");
+        if (undoAvailable) { addDataAction(menu, "Undo last deletion", "undo"); }
+        if (recoveryPayload != null)
+        {
+            JMenuItem recover = new JMenuItem("View original data for recovery...");
+            recover.addActionListener(event ->
+            {
+                JTextArea text = new JTextArea(recoveryPayload, 18, 60);
+                text.setEditable(false);
+                text.selectAll();
+                JOptionPane.showMessageDialog(this, new JScrollPane(text),
+                    "Original data — select and copy to preserve", JOptionPane.INFORMATION_MESSAGE);
+            });
+            menu.add(recover);
+            addDataAction(menu, "Export original then start fresh...", "fresh");
+            menu.show(anchor, 0, anchor.getHeight());
+            return;
+        }
+        JMenuItem resetCurrent = new JMenuItem("Reset current task history...");
 		resetCurrent.addActionListener(event -> confirmReset(
 			"Reset the saved history for the current task?", resetCurrentHistory));
 		menu.add(resetCurrent);
 		JMenuItem resetAll = new JMenuItem("Reset all history...");
 		resetAll.addActionListener(event -> confirmReset(
-			"Reset all Slayer Task Speed history? This cannot be undone.", resetAllHistory));
+			"Reset all Slayer Task Speed history? A recovery backup will be kept.", resetAllHistory));
 		menu.add(resetAll);
 		menu.show(anchor, 0, anchor.getHeight());
 	}
@@ -998,25 +1191,27 @@ public class SlayerSpeedPanel extends PluginPanel
 		add(Box.createRigidArea(new Dimension(0, height)));
 	}
 
-	private void confirmReset(String message, Runnable action)
-	{
+    private void confirmReset(String message, Runnable action)
+    {
+        String context = previewContext;
 		int choice = JOptionPane.showConfirmDialog(
 			this, message, "Confirm reset", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-		if (choice == JOptionPane.YES_OPTION)
+		if (choice == JOptionPane.YES_OPTION && Objects.equals(context, previewContext))
 		{
 			action.run();
 		}
 	}
 
-	private void confirmDeleteRun(TaskRun run)
-	{
+    private void confirmDeleteRun(TaskRun run)
+    {
+        String context = previewContext;
 		int choice = JOptionPane.showConfirmDialog(
 			this,
-			"Delete this recorded task run? This cannot be undone.",
+			"Delete this recorded task run? Undo is available in Help & data for 30 seconds, until history changes.",
 			"Delete task run",
 			JOptionPane.YES_NO_OPTION,
 			JOptionPane.WARNING_MESSAGE);
-		if (choice == JOptionPane.YES_OPTION)
+		if (choice == JOptionPane.YES_OPTION && Objects.equals(context, previewContext))
 		{
 			deleteRun.accept(run);
 		}

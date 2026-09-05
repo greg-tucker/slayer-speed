@@ -43,6 +43,7 @@ public final class MortimerTaskEstimate
 		private final String durationRange;
 		private final int completedTasks;
 		private final String confidence;
+        public String getSourceDescription() { return confidence; }
 
 		public ProfileEstimate(
 			String profileName,

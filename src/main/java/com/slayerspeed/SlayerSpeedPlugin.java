@@ -1,7 +1,8 @@
 package com.slayerspeed;
 
 import com.google.inject.Provides;
-import com.slayerspeed.calculation.Confidence;
+import com.slayerspeed.calculation.TaskEstimate;
+import com.slayerspeed.calculation.TaskEstimateService;
 import com.slayerspeed.calculation.KphCalculator;
 import com.slayerspeed.model.ActiveTask;
 import com.slayerspeed.model.EncounterProfile;
@@ -57,6 +58,7 @@ import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.NpcLootReceived;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.RuneScapeProfileChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDependency;
@@ -72,7 +74,7 @@ import net.runelite.client.util.Text;
 @Slf4j
 @PluginDescriptor(
 	name = "Slayer Task Speed",
-	description = "Tracks Slayer task kills per hour (KPH), XP rates, cannonball use and personal stats to estimate completion time",
+	description = "Estimate remaining Slayer task time from your own pace, with personal history, XP rates and cannonball estimates",
 	tags = {"slayer", "task", "assignment", "kph", "kills", "xp", "experience", "eta", "timer", "speed", "tracker", "stats", "history", "average", "calculator", "estimate", "estimator", "cannon", "cannonballs", "supplies", "boss", "araxxor", "araxyte", "araxytes", "mortimer"}
 )
 @PluginDependency(SlayerPlugin.class)
@@ -126,21 +128,51 @@ public class SlayerSpeedPlugin extends Plugin
 
 	private SlayerSpeedPanel panel;
 	private NavigationButton navigationButton;
-	private String loadedProfileKey;
-	private String lastCompletionSummary;
+	private int lastActivityTick = Integer.MIN_VALUE;
+    private long tickActivityTime;
+    private long activityTimeMillis()
+    {
+        int tick = client.getTickCount();
+        if (tick != lastActivityTick || tickActivityTime == 0)
+        {
+            lastActivityTick = tick;
+            tickActivityTime = System.currentTimeMillis();
+        }
+        return tickActivityTime;
+    }
+
+    private volatile String loadedProfileKey;
+    private final java.util.concurrent.atomic.AtomicBoolean uiQueued = new java.util.concurrent.atomic.AtomicBoolean();
+    private volatile Runnable pendingUi;
+    private long cachedHistoryRevision = -1;
+    private boolean cachedSeparateLocations;
+    private Collection<TaskStatistics> cachedHistory = java.util.Collections.emptyList();
+	private com.slayerspeed.ui.CompletionResult lastCompletionResult;
 	private volatile SlayerSpeedViewModel viewModel = SlayerSpeedViewModel.noTask();
 
 	@Override
 	protected void startUp()
 	{
 		panel = new SlayerSpeedPanel(
-			() -> clientThread.invoke(this::resetCurrentTaskHistory),
-			() -> clientThread.invoke(this::resetAllHistory),
-			(run, excluded) -> clientThread.invoke(() -> setRunExcluded(run, excluded)),
-			run -> clientThread.invoke(() -> deleteRun(run)),
-			profileId -> clientThread.invoke(() -> selectEncounterProfile(profileId)),
+			() -> dispatchPanelAction(this::resetCurrentTaskHistory),
+			() -> dispatchPanelAction(this::resetAllHistory),
+			(run, excluded) -> dispatchPanelAction(() -> setRunExcluded(run, excluded)),
+			run -> dispatchPanelAction(() -> deleteRun(run)),
+			profileId -> dispatchPanelAction(() -> selectEncounterProfile(profileId)),
 			config);
-		navigationButton = NavigationButton.builder()
+        panel.setPauseAction(() -> dispatchPanelAction(() ->
+        {
+            taskTracker.toggleManualPause(activityTimeMillis());
+            refreshView();
+        }));
+        panel.setDismissCompletionAction(() -> dispatchPanelAction(() ->
+        {
+            lastCompletionResult = null;
+            refreshView();
+        }));
+        panel.setDataActions(new com.slayerspeed.ui.HistoryFileActions(panel, clientThread,
+            historyRepository, config, this::refreshView, taskTracker::loadProfile));
+        navigationButton = NavigationButton.builder()
 			.tooltip("Slayer Task Speed")
 			.icon(SlayerSpeedIcon.load())
 			.priority(7)
@@ -175,7 +207,7 @@ public class SlayerSpeedPlugin extends Plugin
 		panel = null;
 		navigationButton = null;
 		loadedProfileKey = null;
-		lastCompletionSummary = null;
+		lastCompletionResult = null;
 		viewModel = SlayerSpeedViewModel.noTask();
 		log.debug("SlayerSpeed stopped");
 	}
@@ -204,9 +236,10 @@ public class SlayerSpeedPlugin extends Plugin
 				slayerPluginService.getRemainingAmount());
 		flushCannonballs(snapshot);
 
-		TaskUpdate update = taskTracker.observe(
+        taskTracker.setSegmentedTiming(config.experimentalSegmentedTiming());
+        TaskUpdate update = taskTracker.observe(
 			snapshot,
-			System.currentTimeMillis(),
+			activityTimeMillis(),
 			config.idleTimeoutMinutes(),
 			config.separateByLocation(),
 			config.maximumRecentRuns());
@@ -214,7 +247,7 @@ public class SlayerSpeedPlugin extends Plugin
 			&& update.getEndedRun().getStatus() == TaskRunStatus.COMPLETED
 			&& config.showCompletionSummary())
 		{
-			lastCompletionSummary = createCompletionSummary(update.getEndedRun());
+			lastCompletionResult = createCompletionResult(update.getEndedRun());
 		}
 		if (update.isTaskStarted() || update.getEndedRun() != null)
 		{
@@ -274,7 +307,7 @@ public class SlayerSpeedPlugin extends Plugin
 				if (bonusXp > 0)
 				{
 					taskTracker.applyBonusXp(
-						bonusXp, System.currentTimeMillis(), config.idleTimeoutMinutes());
+						bonusXp, activityTimeMillis(), config.idleTimeoutMinutes());
 					refreshView();
 				}
 			}
@@ -309,7 +342,7 @@ public class SlayerSpeedPlugin extends Plugin
 		}
 
 		int progress = taskTracker.confirmCompletion(
-			System.currentTimeMillis(), config.idleTimeoutMinutes());
+			activityTimeMillis(), config.idleTimeoutMinutes());
 		if (progress > 0)
 		{
 			applyAttribution(attributionService.onTaskProgress(progress, client.getTickCount()));
@@ -333,7 +366,8 @@ public class SlayerSpeedPlugin extends Plugin
 	{
 		switch (event.getGameState())
 		{
-			case HOPPING:
+			case LOGIN_SCREEN:
+            case HOPPING:
 			case LOGGING_IN:
 			case CONNECTION_LOST:
 				flushCannonballs();
@@ -356,7 +390,7 @@ public class SlayerSpeedPlugin extends Plugin
 	{
 		taskTracker.pause();
 		loadedProfileKey = null;
-		lastCompletionSummary = null;
+		lastCompletionResult = null;
 		attributionService.reset();
 		slayerXpTracker.reset();
 		cannonballTracker.clear();
@@ -391,7 +425,7 @@ public class SlayerSpeedPlugin extends Plugin
 		taskTracker.applyAttribution(
 			result.getLiteralKills(),
 			result.getSlayerXp(),
-			System.currentTimeMillis(),
+			activityTimeMillis(),
 			config.idleTimeoutMinutes());
 		refreshView();
 	}
@@ -458,30 +492,103 @@ public class SlayerSpeedPlugin extends Plugin
 	private void resetAllHistory()
 	{
 		historyRepository.deleteAll();
-		lastCompletionSummary = null;
+		lastCompletionResult = null;
 		taskTracker.checkpoint();
 		refreshView();
 	}
 
-	private void refreshView()
-	{
-		viewModel = createViewModel();
-		if (panel != null)
-		{
-			SlayerSpeedViewModel currentView = viewModel;
-			Collection<TaskStatistics> history = new ArrayList<>(
-				historyRepository.allStatistics(config.separateByLocation()));
-			Collection<TaskStatistics> exactStoredHistory = new ArrayList<>(
-				historyRepository.allStatistics(true));
-			SwingUtilities.invokeLater(() ->
-			{
-				if (panel != null)
-				{
-					panel.update(currentView, history, exactStoredHistory);
-				}
-			});
-		}
-	}
+    @Subscribe
+    public void onConfigChanged(ConfigChanged event)
+    {
+        if (SlayerSpeedConfig.GROUP.equals(event.getGroup()))
+        {
+            clientThread.invoke(this::refreshView);
+        }
+    }
+
+    private void dispatchPanelAction(Runnable action)
+    {
+        SlayerSpeedPanel target = panel;
+        String expected = target == null ? "" : target.getActionContext();
+        clientThread.invoke(() ->
+        {
+            ActiveTask active = taskTracker.getActiveTask();
+            String current = loadedProfileKey + ":" + (active == null ? "" : active.getId());
+            if (target == panel && expected.equals(current)
+                && java.util.Objects.equals(loadedProfileKey, historyRepository.getProfileIdentity()))
+            {
+                action.run();
+            }
+        });
+    }
+
+    private void refreshView()
+    {
+        viewModel = createViewModel();
+        if (panel == null) { return; }
+        SlayerSpeedPanel targetPanel = panel;
+        SlayerSpeedViewModel currentView = viewModel;
+        String profile = loadedProfileKey;
+        String storageMessage = historyRepository.getStorageMessage();
+        String recoveryPayload = historyRepository.getRecoveryPayload();
+        boolean undoAvailable = historyRepository.canUndoDeletion();
+        Collection<TaskStatistics> exactHistory = historyRepository.snapshotStatistics();
+        if (cachedHistoryRevision != historyRepository.getHistoryRevision()
+            || cachedSeparateLocations != config.separateByLocation())
+        {
+            cachedHistoryRevision = historyRepository.getHistoryRevision();
+            cachedSeparateLocations = config.separateByLocation();
+            if (cachedSeparateLocations) { cachedHistory = exactHistory; }
+            else
+            {
+                Map<String, TaskStatistics> combined = new LinkedHashMap<>();
+                for (TaskStatistics stats : exactHistory)
+                {
+                    TaskKey key = new TaskKey(stats.getTaskName(), null, stats.getEncounterProfileId(), stats.getTimingPolicy());
+                    TaskStatistics group = combined.computeIfAbsent(key.asStorageKey(), ignored ->
+                        new TaskStatistics(stats.getTaskName(), null, stats.getEncounterProfileId(), stats.getEncounterProfileName(), stats.getTimingPolicy()));
+                    group.merge(stats);
+                }
+                cachedHistory = java.util.Collections.unmodifiableCollection(new ArrayList<>(combined.values()));
+            }
+        }
+        Collection<TaskStatistics> history = cachedHistory;
+        ActiveTask active = taskTracker.getActiveTask();
+        com.slayerspeed.ui.CompletionResult completion = lastCompletionResult;
+        String activeName = active == null ? "" : active.getTaskName();
+        String context = profile + ":" + (active == null ? "" : active.getId());
+        int initial = active == null ? 0 : active.getInitialAmount();
+        int observedStart = active == null ? 0 : active.getObservedStartAmount();
+        int remaining = active == null ? 0 : active.getLastRemainingAmount();
+        boolean pauseEnabled = active != null && active.getTimingPolicy() != 0;
+        boolean manuallyPaused = active != null && active.isManualPaused();
+        String timingStatus = active == null ? "" : manuallyPaused ? "Paused — resumes on task activity"
+            : active.isSuspended() ? "Suspended — waiting for task activity"
+            : active.getLastActivityAtMillis() <= 0 ? "Waiting for activity"
+            : "Tracking — capped activity gaps";
+        pendingUi = () ->
+        {
+            if (panel == targetPanel && java.util.Objects.equals(profile, loadedProfileKey))
+            {
+                targetPanel.updateHistoryContext(activeName);
+                targetPanel.update(currentView, history, exactHistory);
+                targetPanel.updateCompletion(completion);
+                targetPanel.updateStorageStatus(storageMessage, recoveryPayload);
+                targetPanel.setUndoAvailable(undoAvailable);
+                targetPanel.updateProgress(context, initial, observedStart, remaining);
+                targetPanel.updateTiming(timingStatus, pauseEnabled, manuallyPaused);
+            }
+        };
+        if (uiQueued.compareAndSet(false, true))
+        {
+            SwingUtilities.invokeLater(() ->
+            {
+                Runnable update = pendingUi;
+                uiQueued.set(false);
+                if (update != null) { update.run(); }
+            });
+        }
+    }
 
 	private EncounterSelection createEncounterSelection(ActiveTask active)
 	{
@@ -560,7 +667,7 @@ public class SlayerSpeedPlugin extends Plugin
 		String note;
 		if (active.hasManualEncounterProfile())
 		{
-			note = "Manual estimate for this task";
+			note = "Recording override for the whole task";
 		}
 		else if (active.getDetectedEncounterProfileId() != null
 			&& !active.getDetectedEncounterProfileId().isEmpty())
@@ -569,7 +676,7 @@ public class SlayerSpeedPlugin extends Plugin
 		}
 		else
 		{
-			note = "Auto switches after a confirmed kill";
+			note = "Assumed until a confirmed kill";
 		}
 		return new EncounterSelection(selected, profiles, options, profiles.size() > 1, note);
 	}
@@ -579,15 +686,22 @@ public class SlayerSpeedPlugin extends Plugin
 		ActiveTask active = taskTracker.getActiveTask();
 		if (active == null)
 		{
-			return SlayerSpeedViewModel.noTask(lastCompletionSummary);
+			return SlayerSpeedViewModel.noTask(lastCompletionResult == null ? null : lastCompletionResult.getHtml());
 		}
 
 		EncounterSelection encounter = createEncounterSelection(active);
 		TaskKey key = new TaskKey(
 			active.getTaskName(),
 			config.separateByLocation() ? active.getTaskLocation() : null,
-			encounter.selectedProfile.getId());
-		TaskStatistics historical = historyRepository.find(key, config.separateByLocation());
+			encounter.selectedProfile.getId(), active.getTimingPolicy());
+        com.slayerspeed.calculation.HistoryEstimateService historyEstimates =
+            new com.slayerspeed.calculation.HistoryEstimateService();
+        com.slayerspeed.calculation.HistoryEstimateService.Selection selection = historyEstimates.selectWithFallback(
+            historyRepository.find(key, config.separateByLocation()),
+            active.getTimingPolicy() == 0 ? null : historyRepository.find(new TaskKey(active.getTaskName(),
+                config.separateByLocation() ? active.getTaskLocation() : null, encounter.selectedProfile.getId(), 0),
+                config.separateByLocation()), config.estimateWindow());
+        TaskStatistics historical = selection.statistics;
 		long historicalMillis = historical == null ? 0L : historical.getTotalActiveMillis();
 		int historicalUnits = historical == null ? 0 : historical.getTotalTaskProgressUnits();
 		int historicalKills = historical == null ? 0 : historical.getTotalActualKills();
@@ -597,9 +711,9 @@ public class SlayerSpeedPlugin extends Plugin
 		int historicalCannonKills = historical == null ? 0 : historical.getTotalCannonRunActualKills();
 		int historicalCannonUnits = historical == null ? 0 : historical.getTotalCannonRunTaskProgressUnits();
 
-		OptionalDouble currentLiteral = KphCalculator.literalKph(active.getActualKills(), active.getActiveMillis());
-		OptionalDouble currentEffective = KphCalculator.effectiveKph(active.getTaskProgressUnits(), active.getActiveMillis());
-		OptionalDouble currentXp = KphCalculator.slayerXpPerHour(active.getTotalSlayerXp(), active.getActiveMillis());
+		OptionalDouble currentLiteral = KphCalculator.literalKph(active.getRateActualKills(), active.getActiveMillis());
+		OptionalDouble currentEffective = KphCalculator.effectiveKph(active.getRateTaskProgressUnits(), active.getActiveMillis());
+		OptionalDouble currentXp = KphCalculator.slayerXpPerHour(active.getRateSlayerXp(), active.getActiveMillis());
 		OptionalDouble historicalLiteral = KphCalculator.literalKph(historicalKills, historicalMillis);
 		OptionalDouble historicalEffective = KphCalculator.effectiveKph(historicalUnits, historicalMillis);
 		OptionalDouble historicalXpRate = KphCalculator.slayerXpPerHour(historicalXp, historicalMillis);
@@ -615,29 +729,15 @@ public class SlayerSpeedPlugin extends Plugin
 		OptionalDouble currentBallsPerUnit = KphCalculator.cannonballsPerTaskUnit(
 			active.getCannonballsUsed(), active.getTaskProgressUnits());
 
-		boolean currentMatchesEstimate = active.getDetectedEncounterProfileId() == null
+		boolean currentMatchesEstimate = !selection.legacyFallback && (active.getDetectedEncounterProfileId() == null
 			|| active.getDetectedEncounterProfileId().isEmpty()
-			|| active.getDetectedEncounterProfileId().equals(encounter.selectedProfile.getId());
-		OptionalDouble estimatedEffective;
-		if (currentMatchesEstimate
-			&& active.getTaskProgressUnits() >= config.currentRateMinimumUnits())
-		{
-			estimatedEffective = KphCalculator.effectiveKph(
-				historicalUnits + active.getTaskProgressUnits(),
-				historicalMillis + active.getActiveMillis());
-		}
-		else
-		{
-			estimatedEffective = historicalEffective;
-			if (!estimatedEffective.isPresent() && currentMatchesEstimate)
-			{
-				estimatedEffective = currentEffective;
-			}
-		}
-
-		OptionalDouble eta = estimatedEffective.isPresent()
-			? KphCalculator.etaMillis(active.getLastRemainingAmount(), estimatedEffective.getAsDouble())
-			: OptionalDouble.empty();
+			|| active.getDetectedEncounterProfileId().equals(encounter.selectedProfile.getId()));
+        TaskEstimate estimate = new TaskEstimateService().calculate(
+            active.getLastRemainingAmount(), active.getRateTaskProgressUnits(), active.getActiveMillis(),
+            historicalUnits, historicalMillis, config.currentRateMinimumUnits(), currentMatchesEstimate,
+            completedTasks, selection.legacyFallback ? selection.getScope()
+                : historyEstimates.scope(historical, config.estimateWindow(), active.getTimingPolicy()));
+        OptionalDouble eta = estimate.getEtaMillis();
 		OptionalDouble displayedBallsPerKill = historicalBallsPerKill;
 		String cannonRateLabel = "Average / kill";
 		OptionalDouble estimateBallsPerUnit = historicalBallsPerUnit;
@@ -672,32 +772,19 @@ public class SlayerSpeedPlugin extends Plugin
 			? KphCalculator.estimatedCannonballs(
 				active.getLastRemainingAmount(), estimateBallsPerUnit.getAsDouble())
 			: OptionalDouble.empty();
-		Confidence confidence = Confidence.fromSample(completedTasks, historicalUnits);
+
 		String paceComparison = currentMatchesEstimate
 			? formatPaceComparison(active.getTaskProgressUnits(), currentEffective, historicalEffective)
 			: "";
-		String finishTime = formatFinishTime(eta);
+		String finishTime = active.isManualPaused() || active.isSuspended() ? "" : formatFinishTime(eta);
 		boolean historyAvailable = historicalUnits > 0 && historicalMillis > 0L;
-		String sample;
-		if (historyAvailable)
-		{
-			sample = "<html><center>" + completedTasks + " full tasks<br>"
-				+ historicalUnits + " observed units</center></html>";
-		}
-		else if (config.showLearningProgress()
-			&& active.getTaskProgressUnits() < config.currentRateMinimumUnits())
-		{
-			sample = "<html><center>Learning this task<br>" + active.getTaskProgressUnits() + " / "
-				+ config.currentRateMinimumUnits() + " task units</center></html>";
-		}
-		else if (config.showLearningProgress())
-		{
-			sample = "<html><center>First task<br>Average ready<br>after completion</center></html>";
-		}
-		else
-		{
-			sample = "<html><center>No completed history<br>Current task excluded<br>until completion</center></html>";
-		}
+        String sample = historyAvailable
+            ? "<html><center>" + completedTasks + " fully observed tasks<br>"
+                + (selection.window == com.slayerspeed.calculation.EstimateWindow.LIFETIME
+                    ? "Total rate-sample count unavailable" : estimate.getScope()) + "</center></html>"
+            : "<html><center>" + estimate.getDescription()
+                + (config.showLearningProgress() ? "<br>Completed tasks build your history." : "")
+                + "</center></html>";
 		String taskDisplay = active.getTaskLocation() == null || active.getTaskLocation().isEmpty()
 			? active.getTaskName()
 			: active.getTaskName() + " (" + active.getTaskLocation() + ")";
@@ -721,14 +808,14 @@ public class SlayerSpeedPlugin extends Plugin
 			KphCalculator.formatXpRate(historicalXpRate),
 			KphCalculator.formatDuration(historicalAverageDuration),
 			sample,
-			confidence.getDisplayName(),
+			estimate.getDescription(),
 			active.getCannonballsUsed() > 0 || historicalCannonballs > 0,
 			Integer.toString(active.getCannonballsUsed()),
 			cannonRateLabel,
 			KphCalculator.formatRate(displayedBallsPerKill),
 			KphCalculator.formatCannonballEstimate(estimatedTaskCannonballs),
 			KphCalculator.formatCannonballEstimate(estimatedRemainingCannonballs),
-			null,
+            lastCompletionResult == null ? null : lastCompletionResult.getHtml(),
 			encounter.selectorRelevant,
 			encounter.selectedProfile.isKnown()
 				? encounter.selectedProfile.getDisplayName()
@@ -737,35 +824,17 @@ public class SlayerSpeedPlugin extends Plugin
 			active.hasManualEncounterProfile()
 				? active.getManualEncounterProfileId()
 				: EncounterProfileOption.AUTO_ID,
-			encounter.options);
+			encounter.options, estimate);
 	}
 
-	private String createCompletionSummary(TaskRun run)
-	{
-		TaskStatistics statistics = historyRepository.find(
-			run.taskKey(config.separateByLocation()), config.separateByLocation());
-		boolean personalBest = statistics != null && statistics.isPersonalBest(run);
-		String taskName = run.getTaskLocation() == null || run.getTaskLocation().isEmpty()
-			? run.getTaskName()
-			: run.getTaskName() + " (" + run.getTaskLocation() + ")";
-		String encounterSummary = run.getEncounterProfileId().isEmpty()
-			? ""
-			: "<br>Estimate profile: " + run.getEncounterProfileName();
-		String cannonSummary = config.showCannonMetrics() && run.getCannonballsUsed() > 0
-			? "<br>Cannonballs: " + run.getCannonballsUsed()
-			: "";
-		return String.format(
-			"<html><b>%s complete%s</b>%s<br>%s · %s task units/hr · %s XP/hr%s</html>",
-			taskName,
-			personalBest ? " — New PB!" : "",
-			encounterSummary,
-			KphCalculator.formatDuration(OptionalDouble.of(run.getActiveMillis())),
-			KphCalculator.formatRate(KphCalculator.effectiveKph(
-				run.getTaskProgressUnits(), run.getActiveMillis())),
-			KphCalculator.formatXpRate(KphCalculator.slayerXpPerHour(
-				run.getTotalSlayerXp(), run.getActiveMillis())),
-			cannonSummary);
-	}
+    private com.slayerspeed.ui.CompletionResult createCompletionResult(TaskRun run)
+    {
+        TaskStatistics statistics = historyRepository.find(
+            run.taskKey(config.separateByLocation()), config.separateByLocation());
+        boolean first = run.isFullTaskObserved() && statistics != null && statistics.getCompletedTaskCount() == 1;
+        boolean best = !first && statistics != null && statistics.isPersonalBest(run);
+        return new com.slayerspeed.ui.CompletionResult(run, historyRepository.isPersistenceAvailable(), best, first);
+    }
 
 	private String formatPaceComparison(
 		int currentProgressUnits,

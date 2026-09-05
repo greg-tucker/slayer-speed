@@ -2,7 +2,22 @@ package com.slayerspeed.model;
 
 public class TaskRun
 {
-	private String id;
+	private int timingPolicy;
+    private int rateUnits;
+    private int rateKills;
+    private int rateXp;
+
+    public int getTimingPolicy() { return timingPolicy; }
+    public int getRateTaskProgressUnits() { return timingPolicy == 0 ? taskProgressUnits : rateUnits; }
+    public int getRateActualKills() { return timingPolicy == 0 ? actualKills : rateKills; }
+    public int getRateSlayerXp() { return timingPolicy == 0 ? getTotalSlayerXp() : rateXp; }
+    void setTimingSample(int policy, int units, int kills, int xp, boolean partial)
+    {
+        timingPolicy = policy; rateUnits = units; rateKills = kills; rateXp = xp;
+        if (policy != 0 && partial) { fullTaskObserved = false; }
+    }
+
+    private String id;
 	private String taskName;
 	private String taskLocation;
 	private String encounterProfileId;
@@ -139,7 +154,7 @@ public class TaskRun
 		return new TaskKey(
 			taskName,
 			separateByLocation ? taskLocation : null,
-			getEncounterProfileId());
+			getEncounterProfileId(), timingPolicy);
 	}
 
 	public String getId()

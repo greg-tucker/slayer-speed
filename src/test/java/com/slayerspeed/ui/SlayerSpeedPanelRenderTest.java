@@ -60,8 +60,26 @@ public class SlayerSpeedPanelRenderTest
 		assertTrue(Files.size(output.resolve("history-expanded.png")) > 0L);
 	}
 
-	@Test
-	public void onboardingOnlyAppearsWhileGlobalHistoryIsEmpty() throws Exception
+    @Test public void searchFiltersHistoryWithoutMutatingIt() throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            SlayerSpeedPanel panel = new SlayerSpeedPanel(() -> {}, () -> {}, (run, excluded) -> {},
+                run -> {}, id -> {}, new SlayerSpeedConfig() {});
+            Collection<TaskStatistics> history = sampleHistory();
+            panel.update(sampleModel(true, false, false), history);
+            javax.swing.JTextField search = (javax.swing.JTextField) findNamedComponent(panel, "historySearch");
+            search.setText("no such monster");
+            assertEquals(0, countEffectivelyVisibleButtons(panel, "historyRunsToggle"));
+            search.setText("araxxor");
+            assertEquals(1, countEffectivelyVisibleButtons(panel, "historyRunsToggle"));
+            search.setText("");
+            assertEquals(history.size(), countEffectivelyVisibleButtons(panel, "historyRunsToggle"));
+        });
+    }
+
+    @Test
+    public void onboardingOnlyAppearsWhileGlobalHistoryIsEmpty() throws Exception
 	{
 		SwingUtilities.invokeAndWait(() ->
 		{
@@ -126,7 +144,7 @@ public class SlayerSpeedPanelRenderTest
 			{
 				SlayerSpeedPanel panel = new SlayerSpeedPanel(() -> { }, () -> { },
 					(run, excluded) -> { }, run -> { }, profileId -> { }, config);
-				assertTrue(hasNamedButton(panel, "storedStatsDebugButton"));
+				assertTrue(hasNamedButton(panel, "compareEstimates"));
 				Collection<TaskStatistics> history = historyAvailable
 					? sampleHistory()
 					: Collections.emptyList();

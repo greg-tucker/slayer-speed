@@ -9,6 +9,8 @@ public interface TaskHistoryStore
 {
 	void loadProfile();
 
+    default boolean isPersistenceAvailable() { return true; }
+
 	void saveRun(TaskRun run, boolean separateByLocation, int maximumRecentRuns);
 
 	void saveCheckpoint(ActiveTask activeTask);

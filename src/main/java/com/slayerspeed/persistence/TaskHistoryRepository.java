@@ -22,60 +22,237 @@ import net.runelite.client.config.ConfigManager;
 @Singleton
 public class TaskHistoryRepository implements TaskHistoryStore
 {
-	private static final String DATA_KEY = "taskHistoryV1";
+	static final String DATA_KEY = "taskHistoryV1";
 
-	private final ConfigManager configManager;
+	private final ProfileStorage storage;
+    private String recoveryPayload;
+    private String undoStatistics;
+    private String undoKey;
+    private String undoProfile;
+    private long undoExpires;
+    private long undoRevision;
+
+    public enum ImportMode { REPLACE, MERGE, RECOVER_CHECKPOINT }
+
+    public static final class ImportPreview
+    {
+        private final String profile;
+        private final long revision;
+        private final String encoded;
+        private final ImportMode mode;
+        private final String summary;
+        private ImportPreview(String profile, long revision, String encoded, ImportMode mode, String summary)
+        {
+            this.profile = profile; this.revision = revision; this.encoded = encoded;
+            this.mode = mode; this.summary = summary;
+        }
+        public String getSummary() { return summary; }
+    }
+
+    public String exportHistory(boolean checkpoint)
+    {
+        if (!isLoadedProfileCurrent()) { throw new IllegalStateException("No current account profile"); }
+        if (loadState == LoadState.RECOVERY_REQUIRED)
+        {
+            return recoveryPayload;
+        }
+        return HistoryTransfer.exportData(data, gson, checkpoint);
+    }
+
+    public String getBackup()
+    {
+        if (!isLoadedProfileCurrent()) { throw new IllegalStateException("Account changed"); }
+        String backup = storage.read("historyBackup");
+        if (backup == null) { throw new IllegalStateException("No recovery backup is available"); }
+        return backup;
+    }
+
+    public ImportPreview previewImport(String text, ImportMode mode, int limit)
+    {
+        if (!isLoadedProfileCurrent()) { throw new IllegalStateException("No current account profile"); }
+        SlayerSpeedData imported = HistoryTransfer.parse(text, gson);
+        if (mode == ImportMode.RECOVER_CHECKPOINT && data.getCheckpointedActiveTask() != null)
+        {
+            throw new IllegalStateException("Checkpoint recovery requires no active task");
+        }
+        if (mode == ImportMode.MERGE)
+        {
+            if (!isPersistenceAvailable()) { throw new IllegalStateException("Recover history before merging"); }
+            imported = HistoryTransfer.merge(data, imported, gson, limit);
+        }
+        if (mode != ImportMode.RECOVER_CHECKPOINT) { imported.setCheckpointedActiveTask(null); }
+        int count = imported.getStatisticsByTaskKey().values().stream().mapToInt(stats -> stats.getRecentRuns().size()).sum();
+        String summary = mode + ": " + imported.getStatisticsByTaskKey().size() + " task profiles, " + count
+            + " retained runs. Existing data will be backed up."
+            + (mode == ImportMode.RECOVER_CHECKPOINT ? " Includes a compatible saved checkpoint if present."
+                : " Current active assignment is preserved.");
+        return new ImportPreview(loadedProfileKey, historyRevision, encode(imported), mode, summary);
+    }
+
+    public void applyImport(ImportPreview preview)
+    {
+        if (!isLoadedProfileCurrent() || !java.util.Objects.equals(preview.profile, loadedProfileKey)
+            || preview.revision != historyRevision)
+        {
+            throw new IllegalStateException("Account or history changed. Preview the import again.");
+        }
+        if (preview.mode == ImportMode.RECOVER_CHECKPOINT && data.getCheckpointedActiveTask() != null)
+        {
+            throw new IllegalStateException("A task started since preview. Checkpoint was not replaced.");
+        }
+        SlayerSpeedData replacement = HistoryValidator.decode(preview.encoded, gson);
+        if (preview.mode != ImportMode.RECOVER_CHECKPOINT)
+        {
+            replacement.setCheckpointedActiveTask(data.getCheckpointedActiveTask());
+        }
+        backupCurrent();
+        String serialized = encode(replacement);
+        storage.write(DATA_KEY, serialized); // Commit succeeds before replacing live repository state.
+        data = replacement;
+        lastSaveFailed = false;
+        recoveryPayload = null;
+        loadState = LoadState.LOADED;
+        historyRevision++;
+        undoStatistics = null;
+    }
+
+    private void backupCurrent()
+    {
+        if (!isLoadedProfileCurrent()) { throw new IllegalStateException("Account changed"); }
+        String original = storage.read(DATA_KEY);
+        if (original != null)
+        {
+            // Even an oversized unreadable original must remain recoverable. If storage refuses
+            // the backup write, the transaction fails before replacing the original data.
+            // Preserve unreadable data separately, never overwriting the last-good backup.
+            storage.write(loadState == LoadState.RECOVERY_REQUIRED ? "historyUnreadableBackup" : "historyBackup", original);
+        }
+    }
+
+    public boolean canUndoDeletion()
+    {
+        return undoStatistics != null && isPersistenceAvailable()
+            && java.util.Objects.equals(undoProfile, loadedProfileKey)
+            && undoRevision == historyRevision && System.currentTimeMillis() < undoExpires;
+    }
+
+    public void undoDeletion()
+    {
+        if (!canUndoDeletion()) { throw new IllegalStateException("Undo expired or history/account changed"); }
+        data.getStatisticsByTaskKey().put(undoKey, gson.fromJson(undoStatistics, TaskStatistics.class));
+        historyRevision++;
+        undoStatistics = null;
+        save();
+    }
+    private boolean lastSaveFailed;
+    private LoadState loadState = LoadState.EMPTY;
+
+    public enum LoadState { EMPTY, LOADED, RECOVERY_REQUIRED }
+
+    public LoadState getLoadState() { return loadState; }
+    public String getRecoveryPayload() { return recoveryPayload; }
+    public boolean isPersistenceAvailable()
+    {
+        return isLoadedProfileCurrent() && loadState != LoadState.RECOVERY_REQUIRED && !lastSaveFailed;
+    }
+
+    public String getStorageMessage()
+    {
+        if (loadState == LoadState.RECOVERY_REQUIRED)
+        {
+            return "Saved history could not be loaded. Tracking in memory only; open Help & data to recover.";
+        }
+        if (lastSaveFailed) { return "History could not be saved. Tracking in memory; saving will retry at the next checkpoint."; }
+        return isLoadedProfileCurrent() ? "" : "Tracking in memory only until an account profile is available.";
+    }
 	private final Gson gson;
 	private SlayerSpeedData data = new SlayerSpeedData();
 	private String loadedProfileKey;
+    private long historyRevision;
+    private long snapshotRevision = -1;
+    private Collection<TaskStatistics> snapshot = java.util.Collections.emptyList();
+
+    public long getHistoryRevision() { return historyRevision; }
+    public String getProfileIdentity() { return isLoadedProfileCurrent() ? loadedProfileKey : null; }
+
+    public Collection<TaskStatistics> snapshotStatistics()
+    {
+        if (snapshotRevision != historyRevision)
+        {
+            ArrayList<TaskStatistics> copy = new ArrayList<>();
+            for (TaskStatistics stats : allStatistics(true))
+            {
+                copy.add(gson.fromJson(gson.toJson(stats), TaskStatistics.class));
+            }
+            snapshot = java.util.Collections.unmodifiableList(copy);
+            snapshotRevision = historyRevision;
+        }
+        return snapshot;
+    }
 
 	@Inject
 	public TaskHistoryRepository(ConfigManager configManager, Gson gson)
 	{
-		this.configManager = configManager;
-		this.gson = gson;
+        this(new ProfileStorage()
+        {
+            public String profileKey() { return configManager == null ? null : configManager.getRSProfileKey(); }
+            public String read(String key) { return configManager.getRSProfileConfiguration(SlayerSpeedConfig.GROUP, key); }
+            public void write(String key, String value) { configManager.setRSProfileConfiguration(SlayerSpeedConfig.GROUP, key, value); }
+            public void remove(String key) { configManager.unsetRSProfileConfiguration(SlayerSpeedConfig.GROUP, key); }
+        }, gson, true);
 	}
 
-	public void loadProfile()
-	{
-		data = new SlayerSpeedData();
-		loadedProfileKey = currentProfileKey();
-		if (loadedProfileKey == null)
-		{
-			return;
-		}
+    private TaskHistoryRepository(ProfileStorage storage, Gson gson, boolean ignored)
+    {
+        this.storage = storage;
+        this.gson = gson;
+    }
 
-		String json = configManager.getRSProfileConfiguration(SlayerSpeedConfig.GROUP, DATA_KEY);
-		if (json == null || json.trim().isEmpty())
-		{
-			return;
-		}
+    static TaskHistoryRepository forStorage(ProfileStorage storage, Gson gson)
+    {
+        return new TaskHistoryRepository(storage, gson, true);
+    }
 
-		try
-		{
-			SlayerSpeedData loaded = decode(json);
-			if (loaded != null && loaded.getSchemaVersion() == SlayerSpeedData.CURRENT_SCHEMA_VERSION)
-			{
-				data = loaded;
-			}
-			else if (loaded != null && loaded.migrateToCurrentSchema())
-			{
-				data = loaded;
-				save();
-			}
-			else
-			{
-				log.warn("Ignoring unsupported SlayerSpeed data schema");
-			}
-		}
-		catch (JsonParseException | IllegalStateException ex)
-		{
-			log.warn("Unable to read SlayerSpeed task history; starting with empty history", ex);
-		}
-	}
+    public void loadProfile()
+    {
+        historyRevision++;
+        data = new SlayerSpeedData();
+        recoveryPayload = null;
+        undoStatistics = null;
+        loadState = LoadState.EMPTY;
+        lastSaveFailed = false;
+        loadedProfileKey = currentProfileKey();
+        if (loadedProfileKey == null) { return; }
+        String json = storage.read(DATA_KEY);
+        if (json == null || json.trim().isEmpty()) { return; }
+        try
+        {
+            SlayerSpeedData loaded = HistoryValidator.decode(json, gson);
+            boolean migrated = loaded.getSchemaVersion() != SlayerSpeedData.CURRENT_SCHEMA_VERSION;
+            if (migrated && !loaded.migrateToCurrentSchema())
+            {
+                throw new IllegalArgumentException("Unsupported history schema");
+            }
+            data = loaded;
+            loadState = LoadState.LOADED;
+            if (migrated)
+            {
+                storage.write("historyBackup", json);
+                save();
+            }
+        }
+        catch (RuntimeException ex)
+        {
+            data = new SlayerSpeedData();
+            loadState = LoadState.RECOVERY_REQUIRED;
+            recoveryPayload = json;
+            log.warn("Slayer Task Speed history needs recovery; original data preserved");
+        }
+    }
 
 	public void saveRun(TaskRun run, boolean separateByLocation, int maximumRecentRuns)
 	{
+        historyRevision++;
 		// Always retain the most specific key. Whether locations are combined is a read-time choice,
 		// so changing the display setting cannot orphan previously recorded samples.
 		TaskKey key = run.taskKey(true);
@@ -85,7 +262,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 				run.getTaskName(),
 				run.getTaskLocation(),
 				run.getEncounterProfileId(),
-				run.getEncounterProfileName()));
+				run.getEncounterProfileName(), run.getTimingPolicy()));
 		statistics.addRun(run, maximumRecentRuns);
 		data.setCheckpointedActiveTask(null);
 		save();
@@ -123,7 +300,8 @@ public class TaskHistoryRepository implements TaskHistoryStore
 		{
 			TaskKey statisticsKey = taskKey(statistics, false);
 			if (statisticsKey.getTaskName().equals(key.getTaskName())
-				&& statisticsKey.getEncounterProfileId().equals(key.getEncounterProfileId()))
+				&& statisticsKey.getEncounterProfileId().equals(key.getEncounterProfileId())
+                && statisticsKey.getTimingPolicy() == key.getTimingPolicy())
 			{
 				if (combined == null)
 				{
@@ -131,7 +309,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 						statistics.getTaskName(),
 						null,
 						statistics.getEncounterProfileId(),
-						statistics.getEncounterProfileName());
+						statistics.getEncounterProfileName(), statistics.getTimingPolicy());
 				}
 				combined.merge(statistics);
 			}
@@ -156,7 +334,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 				else
 				{
 					TaskKey profileKey = new TaskKey(
-						statistics.getTaskName(), null, statistics.getEncounterProfileId());
+						statistics.getTaskName(), null, statistics.getEncounterProfileId(), statistics.getTimingPolicy());
 					TaskStatistics combined = null;
 					for (TaskStatistics existing : result)
 					{
@@ -170,7 +348,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 					{
 						combined = new TaskStatistics(
 							statistics.getTaskName(), null,
-							statistics.getEncounterProfileId(), statistics.getEncounterProfileName());
+							statistics.getEncounterProfileId(), statistics.getEncounterProfileName(), statistics.getTimingPolicy());
 						result.add(combined);
 					}
 					combined.merge(statistics);
@@ -198,7 +376,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 				TaskStatistics combined = combinedByTask.computeIfAbsent(
 					taskKey.asStorageKey(), ignored -> new TaskStatistics(
 						statistics.getTaskName(), null,
-						statistics.getEncounterProfileId(), statistics.getEncounterProfileName()));
+						statistics.getEncounterProfileId(), statistics.getEncounterProfileName(), statistics.getTimingPolicy()));
 				combined.merge(statistics);
 			}
 			result = new ArrayList<>(combinedByTask.values());
@@ -208,7 +386,9 @@ public class TaskHistoryRepository implements TaskHistoryStore
 	}
 
 	public void deleteTask(TaskKey key, boolean separateByLocation)
-	{
+    {
+        if (isPersistenceAvailable()) { backupCurrent(); }
+        historyRevision++;
 		boolean changed;
 		if (!separateByLocation)
 		{
@@ -242,11 +422,12 @@ public class TaskHistoryRepository implements TaskHistoryStore
 		return new TaskKey(
 			statistics.getTaskName(),
 			separateByLocation ? statistics.getTaskLocation() : null,
-			statistics.getEncounterProfileId());
+			statistics.getEncounterProfileId(), statistics.getTimingPolicy());
 	}
 
 	public void setRunExcluded(TaskRun run, boolean excluded)
 	{
+        historyRevision++;
 		TaskStatistics statistics = data.getStatisticsByTaskKey().get(run.taskKey(true).asStorageKey());
 		if (statistics != null && statistics.setRunExcluded(run.getId(), excluded))
 		{
@@ -256,11 +437,18 @@ public class TaskHistoryRepository implements TaskHistoryStore
 
 	public void deleteRun(TaskRun run)
 	{
-		TaskKey key = run.taskKey(true);
-		TaskStatistics statistics = data.getStatisticsByTaskKey().get(key.asStorageKey());
-		if (statistics != null && statistics.deleteRun(run.getId()))
+        historyRevision++;
+        TaskKey key = run.taskKey(true);
+        TaskStatistics statistics = data.getStatisticsByTaskKey().get(key.asStorageKey());
+        String before = statistics == null ? null : gson.toJson(statistics);
+        if (statistics != null && statistics.deleteRun(run.getId()))
 		{
-			if (statistics.getRecentRuns().isEmpty()
+            undoStatistics = before;
+            undoKey = key.asStorageKey();
+            undoProfile = loadedProfileKey;
+            undoRevision = historyRevision;
+            undoExpires = System.currentTimeMillis() + 30000;
+            if (statistics.getRecentRuns().isEmpty()
 				&& statistics.getTotalTaskProgressUnits() == 0
 				&& statistics.getCompletedTaskCount() == 0)
 			{
@@ -272,11 +460,22 @@ public class TaskHistoryRepository implements TaskHistoryStore
 
 	public void deleteAll()
 	{
-		data = new SlayerSpeedData();
-		if (isLoadedProfileCurrent())
-		{
-			configManager.unsetRSProfileConfiguration(SlayerSpeedConfig.GROUP, DATA_KEY);
-		}
+        historyRevision++;
+        if (!isPersistenceAvailable()) { return; }
+        backupCurrent();
+        if (isLoadedProfileCurrent())
+        {
+            try
+            {
+                storage.remove(DATA_KEY);
+                data = new SlayerSpeedData();
+            }
+            catch (RuntimeException ex)
+            {
+                lastSaveFailed = true;
+                log.warn("Slayer Task Speed reset failed; existing history retained");
+            }
+        }
 	}
 
 	String encode(SlayerSpeedData value)
@@ -289,15 +488,11 @@ public class TaskHistoryRepository implements TaskHistoryStore
 		return gson.fromJson(json, SlayerSpeedData.class);
 	}
 
-	private String currentProfileKey()
-	{
-		if (configManager == null)
-		{
-			return null;
-		}
-		String profileKey = configManager.getRSProfileKey();
-		return profileKey == null || profileKey.isEmpty() ? null : profileKey;
-	}
+    private String currentProfileKey()
+    {
+        String key = storage.profileKey();
+        return key == null || key.isEmpty() ? null : key;
+    }
 
 	private boolean isLoadedProfileCurrent()
 	{
@@ -306,9 +501,18 @@ public class TaskHistoryRepository implements TaskHistoryStore
 
 	private void save()
 	{
-		if (isLoadedProfileCurrent())
-		{
-			configManager.setRSProfileConfiguration(SlayerSpeedConfig.GROUP, DATA_KEY, encode(data));
-		}
+        if (isLoadedProfileCurrent() && loadState != LoadState.RECOVERY_REQUIRED)
+        {
+            try
+            {
+                storage.write(DATA_KEY, encode(data));
+                lastSaveFailed = false;
+            }
+            catch (RuntimeException ex)
+            {
+                lastSaveFailed = true;
+                log.warn("Slayer Task Speed history write failed; retained in memory for retry");
+            }
+        }
 	}
 }

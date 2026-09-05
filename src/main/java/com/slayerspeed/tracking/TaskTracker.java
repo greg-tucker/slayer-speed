@@ -16,6 +16,16 @@ public class TaskTracker
 	private final ActiveTimeTracker activeTimeTracker;
 	private ActiveTask activeTask;
 	private boolean needsRebaselineAfterLoad;
+    private boolean segmentedTiming;
+    public void setSegmentedTiming(boolean enabled) { segmentedTiming = enabled; }
+
+    public void toggleManualPause(long now)
+    {
+        if (activeTask == null || activeTask.getTimingPolicy() == 0) { return; }
+        if (activeTask.isManualPaused()) { activeTask.resumeManually(now); }
+        else { activeTask.pauseManually(); }
+        checkpoint();
+    }
 	private long taskMissingSinceMillis;
 	private long completionConfirmedAtMillis;
 
@@ -110,8 +120,15 @@ public class TaskTracker
 			return TaskUpdate.none();
 		}
 
-		int previous = activeTask.getLastRemainingAmount();
-		int current = snapshot.getRemainingAmount();
+        int previous = activeTask.getLastRemainingAmount();
+        int current = snapshot.getRemainingAmount();
+        if (current > previous && snapshot.getInitialAmount() > 0 && current == snapshot.getInitialAmount())
+        {
+            TaskRun ended = finish(TaskRunStatus.REPLACED, nowMillis, separateByLocation, maximumRecentRuns);
+            activeTask = start(snapshot, nowMillis);
+            repository.saveCheckpoint(activeTask);
+            return new TaskUpdate(0, true, ended);
+        }
 		activeTask.setLastRemainingAmount(current);
 		int progress = Math.max(0, previous - current);
 		if (progress > 0)
@@ -205,15 +222,17 @@ public class TaskTracker
 
 	private ActiveTask start(TaskSnapshot snapshot, long nowMillis)
 	{
-		return new ActiveTask(
-			snapshot.getTaskName(),
+        ActiveTask task = new ActiveTask(
+            snapshot.getTaskName(),
 			snapshot.getTaskLocation(),
 			snapshot.getInitialAmount(),
 			snapshot.getRemainingAmount(),
-			nowMillis);
-	}
+            nowMillis);
+        task.setTimingPolicy(segmentedTiming ? 1 : 0);
+        return task;
+    }
 
-	private TaskRun finish(
+    private TaskRun finish(
 		TaskRunStatus status,
 		long nowMillis,
 		boolean separateByLocation,

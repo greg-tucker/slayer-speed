@@ -6,7 +6,87 @@ import java.util.UUID;
 
 public class ActiveTask
 {
-	private String id;
+	private int timingPolicy;
+    private int rateUnits;
+    private int rateKills;
+    private int rateXp;
+    private int measuredUnits;
+    private int measuredKills;
+    private int measuredXp;
+    private long segmentAnchorMillis;
+    private boolean manualPaused;
+    private boolean suspended;
+    private boolean timingPartial;
+
+    public int getTimingPolicy() { return timingPolicy; }
+    public void setTimingPolicy(int policy) { timingPolicy = policy; }
+    public int getRateTaskProgressUnits() { return timingPolicy == 0 ? taskProgressUnits : rateUnits; }
+    public int getRateActualKills() { return timingPolicy == 0 ? actualKills : rateKills; }
+    public int getRateSlayerXp() { return timingPolicy == 0 ? getTotalSlayerXp() : rateXp; }
+    public boolean isManualPaused() { return manualPaused; }
+    public boolean isSuspended() { return suspended; }
+    public void markLegacyActivity() { suspended = false; }
+
+    public void suspendTiming()
+    {
+        suspended = true;
+        lastActivityAtMillis = 0;
+    }
+
+    public void pauseManually()
+    {
+        if (timingPolicy == 0) { return; }
+        manualPaused = true;
+        lastActivityAtMillis = 0;
+        timingPartial = true;
+    }
+
+    public void resumeManually(long now)
+    {
+        if (timingPolicy == 0) { return; }
+        manualPaused = false;
+        suspended = false;
+        anchorSegment(now);
+    }
+
+    private void anchorSegment(long now)
+    {
+        segmentAnchorMillis = now;
+        lastActivityAtMillis = now;
+        measuredUnits = taskProgressUnits;
+        measuredKills = actualKills;
+        measuredXp = getTotalSlayerXp();
+    }
+
+    public void recordSegmentActivity(long now, int idleTimeoutMinutes)
+    {
+        if (lastActivityAtMillis <= 0 || manualPaused || suspended)
+        {
+            if (setupMillis == 0) { setupMillis = Math.max(0, now - startedAtMillis); }
+            manualPaused = false;
+            suspended = false;
+            // No combat-start evidence exists for the first interval. Do not claim a full duration/PB.
+            timingPartial = true;
+            anchorSegment(now);
+            return;
+        }
+        if (now == segmentAnchorMillis)
+        {
+            // All evidence belonging to the untimed anchor tick is excluded from rate numerators.
+            anchorSegment(now);
+            return;
+        }
+        activeMillis += Math.min(Math.max(0, now - lastActivityAtMillis), Math.max(1, idleTimeoutMinutes) * 60000L);
+        rateUnits += Math.max(0, taskProgressUnits - measuredUnits);
+        rateKills += Math.max(0, actualKills - measuredKills);
+        rateXp += Math.max(0, getTotalSlayerXp() - measuredXp);
+        measuredUnits = taskProgressUnits;
+        measuredKills = actualKills;
+        measuredXp = getTotalSlayerXp();
+        lastActivityAtMillis = now;
+    }
+
+    private String id;
 	private String taskName;
 	private String taskLocation;
 	private int initialAmount;
@@ -50,7 +130,7 @@ public class ActiveTask
 
 	public TaskKey taskKey(boolean separateByLocation)
 	{
-		return new TaskKey(taskName, separateByLocation ? taskLocation : null);
+		return new TaskKey(taskName, separateByLocation ? taskLocation : null, null, timingPolicy);
 	}
 
 	public void addProgressUnits(int units)
@@ -175,8 +255,8 @@ public class ActiveTask
 
 	public TaskRun finish(TaskRunStatus status, long completedAtMillis)
 	{
-		return new TaskRun(
-			id,
+        TaskRun result = new TaskRun(
+            id,
 			taskName,
 			taskLocation,
 			getRecordingEncounterProfileId(),
@@ -193,8 +273,10 @@ public class ActiveTask
 			setupMillis,
 			startedAtMillis,
 			completedAtMillis,
-			status);
-	}
+            status);
+        result.setTimingSample(timingPolicy, rateUnits, rateKills, rateXp, timingPartial);
+        return result;
+    }
 
 	public String getId()
 	{

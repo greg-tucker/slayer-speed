@@ -80,12 +80,8 @@ public class MortimerChoiceOverlay extends Overlay
 			return;
 		}
 
-		int lineCount = estimate.hasData() ? estimate.getProfiles().size() : 1;
-		boolean showSample = estimate.hasData()
-			&& estimate.getProfiles().size() == 1
-			&& estimate.getAdditionalProfileCount() == 0;
-		int panelHeight = 10 + 14 + lineCount * 15 + (showSample ? 13 : 0)
-			+ (estimate.getAdditionalProfileCount() > 0 ? 13 : 0);
+        int panelHeight = 24 + (estimate.hasData() ? estimate.getProfiles().size() * 28 : 15)
+            + (estimate.getAdditionalProfileCount() > 0 ? 13 : 0);
 		int panelWidth = Math.max(112, Math.min(138, row.width / 4));
 		int panelX = row.x + row.width - panelWidth - 8;
 		int panelY = row.y + Math.max(4, (row.height - panelHeight) / 2);
@@ -95,9 +91,7 @@ public class MortimerChoiceOverlay extends Overlay
 		graphics.setColor(PANEL_BORDER);
 		graphics.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 8, 8);
 
-		String heading = estimate.hasData() && estimate.getProfiles().size() > 1
-			? "Your estimates"
-			: "Your estimate";
+        String heading = "All locations";
 		int textY = panelY + 13;
 		drawCentered(graphics, heading, panelX, panelWidth, textY, HEADING);
 		textY += 15;
@@ -108,29 +102,17 @@ public class MortimerChoiceOverlay extends Overlay
 			return;
 		}
 
-		for (MortimerTaskEstimate.ProfileEstimate profile : estimate.getProfiles())
-		{
-			drawEstimate(graphics, profile, panelX, panelWidth, textY);
-			textY += 15;
-		}
-
-		if (showSample)
-		{
-			MortimerTaskEstimate.ProfileEstimate profile = estimate.getProfiles().get(0);
-			String sample = profile.getCompletedTasks() <= 0
-				? "Partial task data"
-				: profile.getCompletedTasks() + " "
-					+ (profile.getCompletedTasks() == 1 ? "task" : "tasks")
-					+ " / " + profile.getConfidence();
-			drawCentered(
-				graphics,
-				sample,
-				panelX,
-				panelWidth,
-				textY,
-				MUTED);
-		}
-		else if (estimate.getAdditionalProfileCount() > 0)
+        for (MortimerTaskEstimate.ProfileEstimate profile : estimate.getProfiles())
+        {
+            drawEstimate(graphics, profile, panelX, panelWidth, textY);
+            textY += 13;
+            String source = profile.getSourceDescription().replace(" history", "")
+                .replace(" recent ", " ").replace(" eligible runs", " runs")
+                .replace("lifetime (fallback)", "fallback");
+            drawCentered(graphics, source, panelX, panelWidth, textY, MUTED);
+            textY += 15;
+        }
+        if (estimate.getAdditionalProfileCount() > 0)
 		{
 			drawCentered(
 				graphics,
