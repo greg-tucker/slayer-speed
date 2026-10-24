@@ -75,7 +75,18 @@ public interface SlayerSpeedConfig extends Config
 		return SlayerSpeedDisplayMode.SIMPLE;
 	}
 
-	@Range(min = 1, max = 30)
+    @ConfigItem(keyName = "overlayDetail", name = "Overlay detail",
+        description = "Choose a compact or detailed overlay independently, or follow the sidebar setting",
+        position = 2, section = DISPLAY_SECTION)
+    default SlayerSpeedOverlayMode overlayDetail() { return SlayerSpeedOverlayMode.FOLLOW_SIDEBAR; }
+
+    @Range(min = 0, max = 30)
+    @ConfigItem(keyName = "overlayIdleMinutes", name = "Hide overlay after inactivity",
+        description = "Hide after this many minutes without Slayer activity or sidebar interaction. Opens again on activity. 0 keeps it visible while assigned.",
+        position = 4, section = DISPLAY_SECTION)
+    default int overlayIdleMinutes() { return 2; }
+
+    @Range(min = 1, max = 30)
 	@ConfigItem(
 		keyName = "idleTimeoutMinutes",
 		name = "Idle timeout",

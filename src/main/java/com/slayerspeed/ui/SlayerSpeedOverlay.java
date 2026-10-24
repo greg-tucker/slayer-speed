@@ -26,24 +26,24 @@ public class SlayerSpeedOverlay extends OverlayPanel
 	public Dimension render(Graphics2D graphics)
 	{
 		SlayerSpeedViewModel model = plugin.getViewModel();
-		if (!config.showOverlay() || !model.isActive())
+		if (!config.showOverlay() || !model.isActive() || !plugin.isOverlayVisible())
 		{
 			return null;
 		}
 
-		boolean detailed = config.displayMode() == SlayerSpeedDisplayMode.DETAILED;
+		boolean detailed = config.overlayDetail().isDetailed(config.displayMode());
 		panelComponent.getChildren().clear();
 		panelComponent.getChildren().add(TitleComponent.builder().text(model.getTask()).build());
 		if (model.isEncounterSelectorRelevant())
 		{
-			panelComponent.getChildren().add(line("Estimate for", model.getEncounterProfileDisplay()));
+			panelComponent.getChildren().add(textLine(model.getEncounterProfileDisplay()));
 		}
 		panelComponent.getChildren().add(line("Remaining", model.getRemaining()));
 		if (!"--".equals(model.getEta()))
 		{
 			panelComponent.getChildren().add(line("ETA", "~" + model.getEta()));
 		}
-        panelComponent.getChildren().add(line("", model.getEstimateDescription()));
+        panelComponent.getChildren().add(textLine(detailed ? model.getEstimateDescription() : model.getCompactEstimateDescription()));
         if (config.showEstimatedFinishTime() && model.hasEstimatedFinishTime())
 		{
 			panelComponent.getChildren().add(line("Est. finish", model.getEstimatedFinishTime()));
@@ -57,13 +57,13 @@ public class SlayerSpeedOverlay extends OverlayPanel
 		{
 			panelComponent.getChildren().add(line("Task units/hr", model.getCurrentEffectiveKph()));
 		}
-		if (detailed && !"--".equals(model.getCurrentSlayerXpPerHour()))
+		if (!"--".equals(model.getCurrentSlayerXpPerHour()))
 		{
 			panelComponent.getChildren().add(line("Slayer XP/hr", model.getCurrentSlayerXpPerHour()));
 		}
 		if (detailed)
 		{
-			panelComponent.getChildren().add(line("Kills / units", model.getObservedCounts()));
+			panelComponent.getChildren().add(textLine(model.getObservedCounts()));
 			if (model.isHistoryAvailable())
 			{
 				panelComponent.getChildren().add(line("Avg units/hr", model.getHistoricalEffectiveKph()));
@@ -71,7 +71,7 @@ public class SlayerSpeedOverlay extends OverlayPanel
 		}
 		if (detailed && config.showPaceComparison() && model.hasPaceComparison())
 		{
-			panelComponent.getChildren().add(line("Vs. average", model.getPaceComparison()));
+			panelComponent.getChildren().add(textLine("Vs. average: " + model.getPaceComparison()));
 		}
 		if (config.showCannonMetrics() && model.isCannonRelevant())
 		{
@@ -85,10 +85,22 @@ public class SlayerSpeedOverlay extends OverlayPanel
 				panelComponent.getChildren().add(line(model.getCannonRateLabel(), model.getCannonballsPerKill()));
 			}
 		}
-		return super.render(graphics);
+        if (model.getActivityState() == SlayerSpeedViewModel.ActivityState.SUSPENDED
+            || model.getActivityState() == SlayerSpeedViewModel.ActivityState.PAUSED)
+        {
+            panelComponent.getChildren().add(textLine(model.getActivityLabel()));
+        }
+        return super.render(graphics);
 	}
 
-	private static LineComponent line(String left, String right)
+    // Descriptive text must use the full-width left side. RuneLite restricts an
+    // overflowing right-side value to one third of the overlay width.
+    private static LineComponent textLine(String text)
+    {
+        return LineComponent.builder().left(text).build();
+    }
+
+    private static LineComponent line(String left, String right)
 	{
 		return LineComponent.builder().left(left).right(right).build();
 	}

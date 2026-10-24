@@ -2,6 +2,11 @@ plugins {
 	id 'java'
 }
 
+// Keep watcher compilation separate from tests and game-client builds.
+if (project.hasProperty('previewBuild')) {
+    layout.buildDirectory.set(file('build/preview-harness'))
+}
+
 repositories {
 	mavenLocal()
 	maven {
@@ -69,3 +74,38 @@ tasks.register('shadowJar', Jar) {
 	archiveFileName.set("${rootProject.name}-${project.version}-all.jar")
 }
 
+
+// Standalone real-component previews. These do not start RuneLite or read account data.
+tasks.register('previewUi', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.slayerspeed.ui.SlayerSpeedPreview'
+    group = 'verification'
+    description = 'Open the interactive sidebar and overlay preview with synthetic data'
+}
+
+tasks.register('renderUi', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.slayerspeed.ui.SlayerSpeedPreview'
+    args '--render'
+    jvmArgs '-Djava.awt.headless=true'
+    group = 'verification'
+    description = 'Render all synthetic UI scenarios into build/ux-preview'
+}
+
+// The watch launcher uses this classpath to restart only the preview JVM after compilation.
+tasks.register('writePreviewRuntime') {
+    dependsOn testClasses
+    doLast {
+        def binary = new File(System.getProperty('java.home'), 'bin/javaw.exe')
+        if (!binary.exists()) { binary = new File(System.getProperty('java.home'), 'bin/java') }
+        def output = layout.buildDirectory.file('ui-preview-runtime.json').get().asFile
+        output.parentFile.mkdirs()
+        output.text = groovy.json.JsonOutput.toJson([
+            java: binary.absolutePath,
+            classpath: sourceSets.test.runtimeClasspath.asPath,
+            main: 'com.slayerspeed.ui.SlayerSpeedPreview'
+        ])
+    }
+}

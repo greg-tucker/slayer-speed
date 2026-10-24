@@ -42,6 +42,17 @@ public final class TaskEstimate
         }
     }
 
+    public String getCompactDescription()
+    {
+        if (source == Source.UNAVAILABLE) { return reason; }
+        if (source == Source.LIVE) { return "This task — early estimate"; }
+        String label = scope.contains("fallback") ? "Older history (fallback)"
+            : scope.contains("recent") ? scope.replace("Legacy ", "").replace("Segmented ", "")
+                .replace("recent ", "Recent ").replace(" eligible runs", " runs")
+            : "All-time history";
+        return label + (source == Source.BLENDED ? " + this task" : "");
+    }
+
     public String getSampleDescription()
     {
         return fullTasks + " fully observed tasks. Total lifetime rate-sample count unavailable.";

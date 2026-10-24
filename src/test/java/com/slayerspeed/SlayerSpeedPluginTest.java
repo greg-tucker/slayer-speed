@@ -9,6 +9,27 @@ import static org.junit.Assert.assertTrue;
 
 public class SlayerSpeedPluginTest
 {
+    @Test
+    public void overlayExpiresAtTimeoutAndReturnsOnFreshActivity()
+    {
+        long activity = 1_000_000L;
+        assertTrue(SlayerSpeedPlugin.isOverlayRecent(activity, activity, 2));
+        assertTrue(SlayerSpeedPlugin.isOverlayRecent(activity + 119_999L, activity, 2));
+        assertFalse(SlayerSpeedPlugin.isOverlayRecent(activity + 120_000L, activity, 2));
+        assertFalse(SlayerSpeedPlugin.isOverlayRecent(activity + 900_000L, activity, 2));
+        assertTrue(SlayerSpeedPlugin.isOverlayRecent(activity + 900_000L, activity + 900_000L, 2));
+    }
+
+    @Test
+    public void overlayTimeoutCanBeConfiguredWithoutChangingTrackingTimeout()
+    {
+        assertTrue(SlayerSpeedPlugin.isOverlayRecent(900_000L, 1L, 0));
+        assertFalse(SlayerSpeedPlugin.isOverlayRecent(900_000L, 1L, 1));
+        assertTrue(SlayerSpeedPlugin.isOverlayRecent(900_000L, 1L, 30));
+        assertFalse(SlayerSpeedPlugin.isOverlayRecent(900_000L, 0L, 2));
+        assertTrue(SlayerSpeedPlugin.isOverlayRecent(900_000L, 900_001L, 2));
+    }
+
 	@Test
 	public void recognizesOnlyExplicitTaskCompletionMessages()
 	{

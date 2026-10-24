@@ -22,7 +22,9 @@ No completed history is required for the first live estimate: it appears once ti
 
 ## Display and estimates
 
-**Simple** emphasizes remaining count, ETA and the selected pace source. **Detailed** adds kill, task-progress and XP rates. Existing display settings remain configurable.
+**Simple** emphasizes remaining count, ETA, live Slayer XP/hr and the selected pace source. **Detailed** adds kill, task-progress and XP rates. Existing display settings remain configurable.
+
+The in-game task overlay hides after two minutes without Slayer activity or sidebar interaction. Fighting a Slayer target keeps it visible; task progress or opening the sidebar brings it back. It also hides on logout and task completion. Under **Display**, change **Hide overlay after inactivity** (0 disables idle hiding). Tracking and saved history continue while the overlay is hidden.
 
 ETA follows the Slayer counter's progress, not physical kills. Bracelets can make one kill reduce that counter by zero, one or two units. Completed partial observations can inform rates; fully observed task durations are tracked separately. Lifetime history may contain older samples whose individual records have been pruned, so an exact lifetime sample count is not always available.
 
@@ -34,7 +36,7 @@ Cannonball estimates describe ammunition expected to be fired. An **If using a c
 
 **Experimental segmented timing** is off by default and applies to new assignments. It adds Pause/Resume and keeps matched timed samples separate from legacy history. Task activity resumes a pause automatically. When matching new-policy history is unavailable, a labelled **Legacy lifetime history (fallback)** estimate can appear; the two timing methods are never blended. See [the timing contract](./docs/TIMING_POLICY.md) for details.
 
-The last completion result stays available during your next task. Copy, dismiss or review it locally. Search history by assignment, encounter or location, or show only the current task.
+The last completion result stays available during your next task. Copy, dismiss or review it locally. History puts the current assignment first by default. Simple cards keep historical Slayer XP/hr and average duration visible; expand a card for other rates and timing details. Search by assignment, encounter or location, or show only the current task.
 
 Mortimer's task-choice estimates remain experimental and disabled by default. Their range reflects assignment sizes, not a statistical confidence interval.
 
@@ -64,11 +66,12 @@ Java 11 compilation target, Gradle wrapper, and RuneLite dependencies.
 ~~~powershell
 .\gradlew.bat test
 .\gradlew.bat run
+.\gradlew.bat previewUi --offline
 ~~~
 
 Jagex Account users should follow RuneLite's [development-client login instructions](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
 
-See [implementation progress](./IMPLEMENTATION_PROGRESS.md) for the resumable work log and [implementation plan](./UX_IMPLEMENTATION_PLAN.md) for acceptance criteria. Synthetic UI fixtures are generated under build/ux-review; they are not gameplay screenshots. Real release captures and beta checks are tracked separately.
+See [implementation progress](./IMPLEMENTATION_PROGRESS.md) for the resumable work log and [implementation plan](./UX_IMPLEMENTATION_PLAN.md) for acceptance criteria. The [standalone UI preview](./docs/UI_PREVIEW.md) uses the real sidebar and overlay with synthetic data, supports automatic rebuilds and requires no game login. Render its scenarios with `renderUi --offline` into build/ux-preview. Additional test fixtures are generated under build/ux-review; they are not gameplay screenshots. Real release captures and beta checks are tracked separately.
 
 ## Licence
 

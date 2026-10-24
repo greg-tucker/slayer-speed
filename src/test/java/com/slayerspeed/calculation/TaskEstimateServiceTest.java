@@ -7,6 +7,18 @@ public class TaskEstimateServiceTest
 {
     private final TaskEstimateService service = new TaskEstimateService();
 
+    @Test public void compactLabelsKeepSampleWindowAndFallbackDistinguishable()
+    {
+        TaskEstimate recent = service.calculate(90, 10, 60000, 100, 3600000, 10, true, 1,
+            "Legacy recent 3/5 eligible runs");
+        assertEquals("Recent 3/5 runs + this task", recent.getCompactDescription());
+        assertTrue(recent.getDescription().contains("Legacy"));
+        TaskEstimate fallback = service.calculate(90, 0, 0, 100, 3600000, 10, false, 1,
+            "Legacy lifetime history (fallback)");
+        assertEquals("Older history (fallback)", fallback.getCompactDescription());
+        assertTrue(fallback.getDescription().contains("Legacy lifetime"));
+    }
+
     @Test public void firstTaskIsAvailableBeforeBlendThreshold()
     {
         TaskEstimate result = service.calculate(90, 2, 60000, 0, 0, 10, true, 0, "Lifetime history");

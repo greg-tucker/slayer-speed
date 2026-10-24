@@ -60,6 +60,49 @@ public class SlayerSpeedPanelRenderTest
 		assertTrue(Files.size(output.resolve("history-expanded.png")) > 0L);
 	}
 
+    @Test public void simpleKeepsXpAndExpandsOtherMetricsWithCurrentTaskFirst() throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            SlayerSpeedPanel panel = new SlayerSpeedPanel(() -> {}, () -> {}, (run, excluded) -> {},
+                run -> {}, id -> {}, new SlayerSpeedConfig() {});
+            panel.updateHistoryContext("Nechryael");
+            panel.update(sampleModel(true, false, false), sampleHistory());
+            findNamedButton(panel, "historyToggle").doClick();
+            Component xp = findNamedComponent(panel, "simpleCurrentXp");
+            assertTrue(isEffectivelyVisible(xp, panel));
+            assertEquals("66.5k", ((javax.swing.JLabel) xp).getText());
+            assertTrue(panel.getComponentZOrder(findNamedComponent(panel, "taskSummary"))
+                < panel.getComponentZOrder(findNamedComponent(panel, "taskOptions")));
+            Container list = (Container) findNamedComponent(panel, "taskHistoryList");
+            assertEquals("historyCard:Nechryael", list.getComponent(0).getName());
+            Container card = (Container) list.getComponent(0);
+            assertTrue(isEffectivelyVisible(findNamedComponent(card, "historyCompactXp"), panel));
+            Component details = findNamedComponent(card, "historyExtraMetrics");
+            assertFalse(isEffectivelyVisible(details, panel));
+            findNamedButton(card, "historyRunsToggle").doClick();
+            assertTrue(isEffectivelyVisible(details, panel));
+        });
+    }
+
+    @Test public void simpleMetricsRemainAccessibleWhenIndividualRunsAreDisabled() throws Exception
+    {
+        SwingUtilities.invokeAndWait(() ->
+        {
+            SlayerSpeedPanel panel = new SlayerSpeedPanel(() -> {}, () -> {}, (run, excluded) -> {},
+                run -> {}, id -> {}, new SlayerSpeedConfig()
+                {
+                    @Override public boolean showRecentRuns() { return false; }
+                });
+            panel.update(sampleModel(true, false, false), sampleHistory());
+            findNamedButton(panel, "historyToggle").doClick();
+            Component details = findNamedComponent(panel, "historyExtraMetrics");
+            assertFalse(isEffectivelyVisible(details, panel));
+            findNamedButton(panel, "historyRunsToggle").doClick();
+            assertTrue(isEffectivelyVisible(details, panel));
+        });
+    }
+
     @Test public void searchFiltersHistoryWithoutMutatingIt() throws Exception
     {
         SwingUtilities.invokeAndWait(() ->
@@ -68,6 +111,7 @@ public class SlayerSpeedPanelRenderTest
                 run -> {}, id -> {}, new SlayerSpeedConfig() {});
             Collection<TaskStatistics> history = sampleHistory();
             panel.update(sampleModel(true, false, false), history);
+            findNamedButton(panel, "historyToggle").doClick();
             javax.swing.JTextField search = (javax.swing.JTextField) findNamedComponent(panel, "historySearch");
             search.setText("no such monster");
             assertEquals(0, countEffectivelyVisibleButtons(panel, "historyRunsToggle"));
@@ -92,6 +136,7 @@ public class SlayerSpeedPanelRenderTest
 
 			Collection<TaskStatistics> history = sampleHistory();
 			panel.update(sampleModel(true, false, false), history);
+            findNamedButton(panel, "historyToggle").doClick();
 			assertTrue(findNamedComponent(panel, "historyOnboarding") == null);
 		});
 	}
@@ -113,10 +158,11 @@ public class SlayerSpeedPanelRenderTest
 				(run, excluded) -> { }, run -> { }, profileId -> { }, config);
 			Collection<TaskStatistics> history = sampleHistory();
 			panel.update(sampleModel(true, true, false), history);
+            findNamedButton(panel, "historyToggle").doClick();
 
 			JButton toggle = findNamedButton(panel, "historyRunsToggle");
 			assertNotNull(toggle);
-			assertTrue(toggle.getText().startsWith("Runs (3)"));
+			assertTrue(toggle.getText().startsWith("Details · 3 runs"));
 			assertEquals(0, countEffectivelyVisibleButtons(panel, "historyRunActions"));
 
 			toggle.doClick();
@@ -370,7 +416,7 @@ public class SlayerSpeedPanelRenderTest
 		}
 	}
 
-	private static SlayerSpeedViewModel sampleModel(
+	static SlayerSpeedViewModel sampleModel(
 		boolean historyAvailable, boolean cannonRelevant, boolean manualSelection)
 	{
 		return new SlayerSpeedViewModel(
@@ -410,6 +456,9 @@ public class SlayerSpeedPanelRenderTest
 					EncounterProfileOption.AUTO_ID,
 					historyAvailable ? "Auto: Araxxor (boss)" : "Auto: Araxytes (regular)"),
 				new EncounterProfileOption("npc:araxyte", "Araxytes (regular)"),
-				new EncounterProfileOption("boss:araxxor", "Araxxor (boss)")));
+				new EncounterProfileOption("boss:araxxor", "Araxxor (boss)")),
+            new com.slayerspeed.calculation.TaskEstimateService().calculate(12, 43, 100000,
+                historyAvailable ? 650 : 0, historyAvailable ? 2000000 : 0, 10, true,
+                historyAvailable ? 3 : 0, "Legacy lifetime history"));
 	}
 }

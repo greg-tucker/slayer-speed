@@ -7,7 +7,9 @@ import java.util.List;
 
 public final class SlayerSpeedViewModel
 {
-	private final TaskEstimate estimate;
+	public enum ActivityState { UNSPECIFIED, WAITING, TRACKING, SUSPENDED, PAUSED }
+    private final ActivityState activityState;
+    private final TaskEstimate estimate;
     private final boolean active;
 	private final String task;
 	private final String remaining;
@@ -144,7 +146,8 @@ public final class SlayerSpeedViewModel
 		List<EncounterProfileOption> encounterOptions,
         TaskEstimate estimate)
 	{
-		this.estimate = estimate;
+		this.activityState = ActivityState.UNSPECIFIED;
+        this.estimate = estimate;
 		this.active = active;
 		this.task = task;
 		this.remaining = remaining;
@@ -191,6 +194,79 @@ public final class SlayerSpeedViewModel
 			false, "--", "--", "--", "--", "Complete a task to build your personal averages.", "No data",
 			false, "0", "Average / kill", "--", "--", "--", completionSummary);
 	}
+
+    private SlayerSpeedViewModel(SlayerSpeedViewModel source, ActivityState state)
+    {
+        this.activityState = state;
+        this.estimate = source.estimate;
+        this.active = source.active;
+        this.task = source.task;
+        this.remaining = source.remaining;
+        this.observedCounts = source.observedCounts;
+        this.currentLiteralKph = source.currentLiteralKph;
+        this.currentEffectiveKph = source.currentEffectiveKph;
+        this.currentRatesDiffer = source.currentRatesDiffer;
+        this.currentSlayerXpPerHour = source.currentSlayerXpPerHour;
+        this.eta = source.eta;
+        this.paceComparison = source.paceComparison;
+        this.estimatedFinishTime = source.estimatedFinishTime;
+        this.historyAvailable = source.historyAvailable;
+        this.historicalLiteralKph = source.historicalLiteralKph;
+        this.historicalEffectiveKph = source.historicalEffectiveKph;
+        this.historicalSlayerXpPerHour = source.historicalSlayerXpPerHour;
+        this.historicalAverageDuration = source.historicalAverageDuration;
+        this.historySample = source.historySample;
+        this.confidence = source.confidence;
+        this.cannonRelevant = source.cannonRelevant;
+        this.cannonballsUsed = source.cannonballsUsed;
+        this.cannonRateLabel = source.cannonRateLabel;
+        this.cannonballsPerKill = source.cannonballsPerKill;
+        this.estimatedTotalCannonballs = source.estimatedTotalCannonballs;
+        this.estimatedRemainingCannonballs = source.estimatedRemainingCannonballs;
+        this.completionSummary = source.completionSummary;
+        this.encounterSelectorRelevant = source.encounterSelectorRelevant;
+        this.encounterProfileDisplay = source.encounterProfileDisplay;
+        this.encounterSelectionNote = source.encounterSelectionNote;
+        this.selectedEncounterOptionId = source.selectedEncounterOptionId;
+        this.encounterOptions = source.encounterOptions;
+    }
+    public SlayerSpeedViewModel withActivityState(ActivityState state)
+    {
+        return new SlayerSpeedViewModel(this, state);
+    }
+    public ActivityState getActivityState() { return activityState; }
+    public String getActivityLabel()
+    {
+        switch (activityState)
+        {
+            case TRACKING: return "Tracking task activity";
+            case PAUSED: return "Paused — resumes on activity";
+            case SUSPENDED: return "Waiting for task activity";
+            case WAITING: return "Waiting for timed activity";
+            default: return "";
+        }
+    }
+    public String getActivityExplanation()
+    {
+        if (activityState == ActivityState.TRACKING || activityState == ActivityState.UNSPECIFIED) { return ""; }
+        String rates = "--".equals(currentSlayerXpPerHour) && "--".equals(currentEffectiveKph)
+            ? "" : "Rates shown are from recorded activity. ";
+        if (estimate == null || estimate.getSource() == TaskEstimate.Source.UNAVAILABLE)
+        {
+            return rates + "An estimate needs timed task progress.";
+        }
+        switch (estimate.getSource())
+        {
+            case HISTORY: return rates + "ETA uses saved history.";
+            case BLENDED: return rates + "ETA uses history and recorded pace.";
+            default: return rates + "ETA uses recorded pace.";
+        }
+    }
+
+    public String getCompactEstimateDescription()
+    {
+        return estimate == null ? getEstimateDescription() : estimate.getCompactDescription();
+    }
 
     public TaskEstimate getEstimate() { return estimate; }
 

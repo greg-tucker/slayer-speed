@@ -149,6 +149,11 @@ public class SlayerSpeedPlugin extends Plugin
     private Collection<TaskStatistics> cachedHistory = java.util.Collections.emptyList();
 	private com.slayerspeed.ui.CompletionResult lastCompletionResult;
 	private volatile SlayerSpeedViewModel viewModel = SlayerSpeedViewModel.noTask();
+    private volatile boolean overlayTaskAvailable;
+    private volatile long overlayLastRelevantAt;
+    private volatile int overlayIdleMinutes = 2;
+    private long lastPanelInteractionAt;
+    private long lastSlayerCombatAt;
 
 	@Override
 	protected void startUp()
@@ -160,6 +165,12 @@ public class SlayerSpeedPlugin extends Plugin
 			run -> dispatchPanelAction(() -> deleteRun(run)),
 			profileId -> dispatchPanelAction(() -> selectEncounterProfile(profileId)),
 			config);
+        panel.setInteractionAction(() -> dispatchPanelAction(() -> {}));
+        panel.setDisplayModeAction(mode -> dispatchPanelAction(() ->
+        {
+            configManager.setConfiguration(SlayerSpeedConfig.GROUP, "displayMode", mode);
+            refreshView();
+        }));
         panel.setPauseAction(() -> dispatchPanelAction(() ->
         {
             taskTracker.toggleManualPause(activityTimeMillis());
@@ -193,6 +204,9 @@ public class SlayerSpeedPlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
+        overlayTaskAvailable = false;
+        lastPanelInteractionAt = 0L;
+        lastSlayerCombatAt = 0L;
 		flushCannonballs();
 		taskTracker.pause();
 		attributionService.reset();
@@ -251,8 +265,16 @@ public class SlayerSpeedPlugin extends Plugin
 		}
 		if (update.isTaskStarted() || update.getEndedRun() != null)
 		{
+            lastPanelInteractionAt = 0L;
+            lastSlayerCombatAt = 0L;
 			attributionService.reset();
 		}
+        Actor player = client.getLocalPlayer();
+        if (player != null && player.getInteracting() instanceof NPC
+            && slayerPluginService.getTargets().contains(player.getInteracting()))
+        {
+            lastSlayerCombatAt = System.currentTimeMillis();
+        }
 		if (update.getProgressDelta() > 0)
 		{
 			applyAttribution(attributionService.onTaskProgress(update.getProgressDelta(), tick));
@@ -364,6 +386,8 @@ public class SlayerSpeedPlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
+        // No game ticks arrive on the login screen to refresh stale task data.
+        overlayTaskAvailable = false;
 		switch (event.getGameState())
 		{
 			case LOGIN_SCREEN:
@@ -388,6 +412,9 @@ public class SlayerSpeedPlugin extends Plugin
 	@Subscribe
 	public void onRuneScapeProfileChanged(RuneScapeProfileChanged event)
 	{
+        overlayTaskAvailable = false;
+        lastPanelInteractionAt = 0L;
+        lastSlayerCombatAt = 0L;
 		taskTracker.pause();
 		loadedProfileKey = null;
 		lastCompletionResult = null;
@@ -407,6 +434,18 @@ public class SlayerSpeedPlugin extends Plugin
 	{
 		return viewModel;
 	}
+
+    public boolean isOverlayVisible()
+    {
+        return overlayTaskAvailable && isOverlayRecent(
+            System.currentTimeMillis(), overlayLastRelevantAt, overlayIdleMinutes);
+    }
+
+    static boolean isOverlayRecent(long now, long lastRelevantAt, int timeoutMinutes)
+    {
+        return timeoutMinutes == 0 || (lastRelevantAt > 0
+            && Math.max(0L, now - lastRelevantAt) < Math.max(1, timeoutMinutes) * 60_000L);
+    }
 
 	private void applyAttribution(AttributionResult result)
 	{
@@ -455,6 +494,8 @@ public class SlayerSpeedPlugin extends Plugin
 		String profileKey = configManager.getRSProfileKey();
 		if (profileKey != null && !profileKey.equals(loadedProfileKey))
 		{
+            lastPanelInteractionAt = 0L;
+            lastSlayerCombatAt = 0L;
 			taskTracker.loadProfile();
 			loadedProfileKey = profileKey;
 		}
@@ -517,7 +558,9 @@ public class SlayerSpeedPlugin extends Plugin
             if (target == panel && expected.equals(current)
                 && java.util.Objects.equals(loadedProfileKey, historyRepository.getProfileIdentity()))
             {
+                lastPanelInteractionAt = System.currentTimeMillis();
                 action.run();
+                refreshView();
             }
         });
     }
@@ -525,6 +568,12 @@ public class SlayerSpeedPlugin extends Plugin
     private void refreshView()
     {
         viewModel = createViewModel();
+        ActiveTask overlayTask = taskTracker.getActiveTask();
+        overlayIdleMinutes = config.overlayIdleMinutes();
+        overlayLastRelevantAt = overlayTask == null ? 0L : Math.max(Math.max(lastPanelInteractionAt, lastSlayerCombatAt),
+            Math.max(overlayTask.getStartedAtMillis(), overlayTask.getLastActivityAtMillis()));
+        overlayTaskAvailable = client.getGameState() == GameState.LOGGED_IN
+            && overlayTask != null && overlayTask.getLastRemainingAmount() > 0;
         if (panel == null) { return; }
         SlayerSpeedPanel targetPanel = panel;
         SlayerSpeedViewModel currentView = viewModel;
@@ -560,6 +609,7 @@ public class SlayerSpeedPlugin extends Plugin
         int initial = active == null ? 0 : active.getInitialAmount();
         int observedStart = active == null ? 0 : active.getObservedStartAmount();
         int remaining = active == null ? 0 : active.getLastRemainingAmount();
+        int recordedUnits = active == null ? -1 : active.getTaskProgressUnits();
         boolean pauseEnabled = active != null && active.getTimingPolicy() != 0;
         boolean manuallyPaused = active != null && active.isManualPaused();
         String timingStatus = active == null ? "" : manuallyPaused ? "Paused — resumes on task activity"
@@ -575,7 +625,7 @@ public class SlayerSpeedPlugin extends Plugin
                 targetPanel.updateCompletion(completion);
                 targetPanel.updateStorageStatus(storageMessage, recoveryPayload);
                 targetPanel.setUndoAvailable(undoAvailable);
-                targetPanel.updateProgress(context, initial, observedStart, remaining);
+                targetPanel.updateProgress(context, initial, observedStart, remaining, recordedUnits);
                 targetPanel.updateTiming(timingStatus, pauseEnabled, manuallyPaused);
             }
         };
@@ -824,7 +874,10 @@ public class SlayerSpeedPlugin extends Plugin
 			active.hasManualEncounterProfile()
 				? active.getManualEncounterProfileId()
 				: EncounterProfileOption.AUTO_ID,
-			encounter.options, estimate);
+            encounter.options, estimate).withActivityState(active.isManualPaused()
+                ? SlayerSpeedViewModel.ActivityState.PAUSED : active.isSuspended()
+                ? SlayerSpeedViewModel.ActivityState.SUSPENDED : active.getLastActivityAtMillis() <= 0
+                ? SlayerSpeedViewModel.ActivityState.WAITING : SlayerSpeedViewModel.ActivityState.TRACKING);
 	}
 
     private com.slayerspeed.ui.CompletionResult createCompletionResult(TaskRun run)

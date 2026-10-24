@@ -1,11 +1,11 @@
 # Implementation progress
 
-Updated: 5 September 2026. Resume from this file and UX_IMPLEMENTATION_PLAN.md.
+Updated: 6 September 2026. Resume from this file and UX_IMPLEMENTATION_PLAN.md.
 Baseline: c5062d7814ac33fbe0048014f24cdb68a7cf0c13. No commits or publishing requested.
 
 ## Current checkpoint
-P0–P8 code is implemented locally. Final full suite passed: 101 tests, zero failures/errors/skips.
-Next resume point: execute the live-client checklist in docs/RELEASE_VALIDATION.md, capture real screenshots and run the consented beta.
+P0–P8 code is implemented locally. Standalone preview harness and native mockup implementation are complete. Latest full suite passed: 110 tests, zero failures/errors/skips, including mode switching, inline Undo, progress accounting and independent overlay detail.
+Next resume point: iterate with scripts/preview-ui.ps1 -Watch (see docs/UI_PREVIEW.md), then execute the live-client checklist in docs/RELEASE_VALIDATION.md, capture real screenshots and run the consented beta.
 No publishing, default promotion, real gameplay captures or beta study has been performed.
 
 ## Status
@@ -71,3 +71,17 @@ No publishing, default promotion, real gameplay captures or beta study has been 
 - Actual high-DPI/client lifecycle behavior, import dialogs, old-client downgrade and growth/retention outcomes remain unverified. Synthetic fixtures are developer checks only.
 
 - Final verification: Gradle offline full suite BUILD SUCCESSFUL (25 seconds), 101 tests, zero failures/errors/skips. Java 11 target; local JDK 23.0.2 and cached RuneLite 1.12.38. git diff --check reports no whitespace errors. Compact and history fixtures inspected; search-label contrast corrected. No commits or publishing performed.
+
+- 6 September live screenshot review: fixed descriptive overlay text occupying RuneLite's narrow right-value column; encounter/source now use full-width text. Wrapped sidebar timing/profile text, removed duplicate search caption, separated history heading, and replaced empty metric boxes with an explicit unavailable state. Added a RuneLite-font overlay render regression at 180/220 px. Full suite passed: 102 tests, zero failures/errors/skips. Corrected fixtures inspected; live-client recheck pending.
+
+- 6 September Simple-mode polish: ETA/XP summary now precedes recording controls; Simple keeps live and historical Slayer XP/hr. Collapsed history retains XP and duration/sample summary, with other rates/timing details expandable. Current assignment sorts first by default; all-time/recent/older-fallback labels stay distinct and full provenance remains in tooltips/Detailed mode. Suspended display reads Waiting for task activity. Full suite passed: 105 tests, zero failures/errors/skips. Compact/expanded/overlay fixtures inspected; removed reserved spacing for hidden Detailed sections. Live-client recheck remains pending.
+
+- 6 September second live screenshot review: Detailed overlay counts and pace now use full-width rows, avoiding the narrow right-value wrapping. Detailed history omits unavailable task-unit rate rows. Added narrow-width/larger-font Detailed overlay regression. Full suite passed: 106 tests, zero failures/errors/skips; large-font fixture inspected. Live-client recheck pending.
+
+- 6 September preview/mockup work started: added standalone previewUi and headless renderUi tasks using real sidebar/overlay classes and synthetic-only actions. Scenario/font/width controls and PNG export implemented; no Client/ConfigManager/credential loading. First compile pending, then mockup integration.
+
+- Preview first build/render succeeded with RuneLiteLAF. Mockup integrated into production UI: prominent ETA, synced Simple/Detailed buttons, independent overlay mode (Follow sidebar by default), current-task badge, labelled recording gap, typed waiting explanations and inline Undo. Watch/restart launcher and docs/UI_PREVIEW.md added. Interaction regressions and full scenario renders are being verified.
+
+- Preview/mockup completion: previewUi, renderUi and the Windows rebuild watcher work with synthetic data only. The watcher was launched successfully and recovered from a compile failure while preserving its previous preview. Actual PNG review covered active, waiting, deleted, long-name and narrow/larger-font states; this exposed and corrected summary alignment and text clipping. Full suite: 110 tests, no failures/errors. Live RuneLite docking, scaling and account lifecycle checks remain release gates. No commits or publishing performed.
+
+- Final harness hardening: watcher compilation now uses build/preview-harness to avoid competing with test/client compilation. Verified isolated watcher launch alongside the final test/render build (BUILD SUCCESSFUL), and inspected final normal/large-font PNGs. The standalone preview is open; close its window to stop the watcher.
