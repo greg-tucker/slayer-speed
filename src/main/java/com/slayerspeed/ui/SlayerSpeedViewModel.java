@@ -7,7 +7,7 @@ import java.util.List;
 
 public final class SlayerSpeedViewModel
 {
-	public enum ActivityState { UNSPECIFIED, WAITING, TRACKING, SUSPENDED, PAUSED }
+	public enum ActivityState { UNSPECIFIED, WAITING, TRACKING, SUSPENDED }
     private final ActivityState activityState;
     private final TaskEstimate estimate;
     private final boolean active;
@@ -240,7 +240,6 @@ public final class SlayerSpeedViewModel
         switch (activityState)
         {
             case TRACKING: return "Tracking task activity";
-            case PAUSED: return "Paused — resumes on activity";
             case SUSPENDED: return "Waiting for task activity";
             case WAITING: return "Waiting for timed activity";
             default: return "";

@@ -46,8 +46,7 @@ public final class TaskEstimate
     {
         if (source == Source.UNAVAILABLE) { return reason; }
         if (source == Source.LIVE) { return "This task — early estimate"; }
-        String label = scope.contains("fallback") ? "Older history (fallback)"
-            : scope.contains("recent") ? scope.replace("Legacy ", "").replace("Segmented ", "")
+        String label = scope.toLowerCase(java.util.Locale.ENGLISH).contains("recent") ? scope
                 .replace("recent ", "Recent ").replace(" eligible runs", " runs")
             : "All-time history";
         return label + (source == Source.BLENDED ? " + this task" : "");

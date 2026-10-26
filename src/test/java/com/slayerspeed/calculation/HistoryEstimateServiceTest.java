@@ -25,24 +25,9 @@ public class HistoryEstimateServiceTest
         assertEquals(0, selected.getCompletedTaskCount());
         assertEquals(40, selected.getTotalCannonballsUsed());
         assertEquals(20, selected.getTotalCannonRunTaskProgressUnits());
-        assertEquals("Legacy recent 1/5 eligible runs", service.scope(selected, EstimateWindow.RECENT_5, 0));
+        assertEquals("Recent 1/5 eligible runs", service.scope(selected, EstimateWindow.RECENT_5));
         assertSame(history, service.select(history, EstimateWindow.LIFETIME));
         assertEquals(920, history.getTotalTaskProgressUnits());
-    }
-
-    @Test public void fallbackChangesScopeAndNeverBlendsCohorts()
-    {
-        TaskStatistics legacy = new TaskStatistics("Gargoyles", null);
-        legacy.addRun(run("old", 100, 3600000, 1, TaskRunStatus.COMPLETED, true, 0), 50);
-        HistoryEstimateService.Selection result = service.selectWithFallback(null, legacy, EstimateWindow.RECENT_5);
-        assertTrue(result.legacyFallback);
-        assertEquals(EstimateWindow.LIFETIME, result.window);
-        assertEquals("Legacy lifetime history (fallback)", result.getScope());
-        TaskEstimate estimate = new TaskEstimateService().calculate(100, 1000, 60000,
-            result.statistics.getTotalTaskProgressUnits(), result.statistics.getTotalActiveMillis(), 10,
-            !result.legacyFallback, 1, result.getScope());
-        assertEquals(TaskEstimate.Source.HISTORY, estimate.getSource());
-        assertEquals(3600000, estimate.getEtaMillis().getAsDouble(), 0.01);
     }
 
     @Test public void sortsGloballyAndRejectsExcludedAndUntimedRuns()

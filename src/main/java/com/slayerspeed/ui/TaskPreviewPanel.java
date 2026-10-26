@@ -109,10 +109,9 @@ public final class TaskPreviewPanel extends JPanel
         {
             HistoryEstimateService service = new HistoryEstimateService();
             stats = service.select(stats, window);
-            scope = service.scope(stats, window, stats.getTimingPolicy());
+            scope = service.scope(stats, window);
             label = stats.getTaskName() + " / " + stats.getEncounterProfileName()
-                + " / " + (stats.getTaskLocation() == null ? "Unspecified location" : stats.getTaskLocation())
-                + (stats.getTimingPolicy() == 0 ? " / Legacy" : " / Segmented");
+                + " / " + (stats.getTaskLocation() == null ? "Unspecified location" : stats.getTaskLocation());
             StringBuilder detail = new StringBuilder(window == null || window == EstimateWindow.LIFETIME
                 ? "Retained records only. Lifetime totals can also include pruned records.\n"
                 : "Every eligible run contributing to this estimate:\n");
@@ -121,7 +120,7 @@ public final class TaskPreviewPanel extends JPanel
             {
                 detail.append(date.format(java.time.Instant.ofEpochMilli(run.getCompletedAtMillis())
                     .atZone(java.time.ZoneId.systemDefault()))).append(" — ")
-                    .append(run.getRateTaskProgressUnits()).append(" timed units, ")
+                    .append(run.getTaskProgressUnits()).append(" timed units, ")
                     .append(KphCalculator.formatDuration(java.util.OptionalDouble.of(run.getActiveMillis())))
                     .append(run.isFullTaskObserved() ? ", full task" : ", partial")
                     .append(run.isExcludedFromAverages() ? ", excluded" : "")

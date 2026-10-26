@@ -16,16 +16,6 @@ public class TaskTracker
 	private final ActiveTimeTracker activeTimeTracker;
 	private ActiveTask activeTask;
 	private boolean needsRebaselineAfterLoad;
-    private boolean segmentedTiming;
-    public void setSegmentedTiming(boolean enabled) { segmentedTiming = enabled; }
-
-    public void toggleManualPause(long now)
-    {
-        if (activeTask == null || activeTask.getTimingPolicy() == 0) { return; }
-        if (activeTask.isManualPaused()) { activeTask.resumeManually(now); }
-        else { activeTask.pauseManually(); }
-        checkpoint();
-    }
 	private long taskMissingSinceMillis;
 	private long completionConfirmedAtMillis;
 
@@ -234,7 +224,6 @@ public class TaskTracker
 			snapshot.getInitialAmount(),
 			snapshot.getRemainingAmount(),
             nowMillis);
-        task.setTimingPolicy(segmentedTiming ? 1 : 0);
         return task;
     }
 

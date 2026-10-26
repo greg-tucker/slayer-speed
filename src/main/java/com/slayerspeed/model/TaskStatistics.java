@@ -7,10 +7,7 @@ import java.util.List;
 
 public class TaskStatistics
 {
-	private int timingPolicy;
-    public int getTimingPolicy() { return timingPolicy; }
-
-    private String taskName;
+	private String taskName;
 	private String taskLocation;
 	private String encounterProfileId;
 	private String encounterProfileName;
@@ -44,14 +41,7 @@ public class TaskStatistics
 		String encounterProfileId,
 		String encounterProfileName)
 	{
-        this(taskName, taskLocation, encounterProfileId, encounterProfileName, 0);
-    }
-
-    public TaskStatistics(String taskName, String taskLocation, String encounterProfileId,
-        String encounterProfileName, int timingPolicy)
-    {
-        this.timingPolicy = timingPolicy;
-        this.taskName = taskName;
+		this.taskName = taskName;
 		this.taskLocation = taskLocation;
 		this.encounterProfileId = encounterProfileId;
 		this.encounterProfileName = encounterProfileName;
@@ -59,7 +49,6 @@ public class TaskStatistics
 
 	public void addRun(TaskRun run, int maximumRecentRuns)
 	{
-        if (timingPolicy != run.getTimingPolicy()) { throw new IllegalArgumentException("Timing policies cannot be pooled"); }
 		if (isIncludedCompletedRun(run))
 		{
 			applyRunToAggregates(run, 1);
@@ -78,9 +67,8 @@ public class TaskStatistics
 		considerPersonalBest(run);
 	}
 
-    public void merge(TaskStatistics other)
-    {
-        if (timingPolicy != other.timingPolicy) { throw new IllegalArgumentException("Timing policies cannot be pooled"); }
+	public void merge(TaskStatistics other)
+	{
 		totalActualKills += other.totalActualKills;
 		totalTaskProgressUnits += other.totalTaskProgressUnits;
 		totalSlayerXp += other.totalSlayerXp;
@@ -216,9 +204,9 @@ public class TaskStatistics
 
 	private void applyRunToAggregates(TaskRun run, int direction)
 	{
-		totalActualKills = Math.max(0, totalActualKills + direction * run.getRateActualKills());
-		totalTaskProgressUnits = Math.max(0, totalTaskProgressUnits + direction * run.getRateTaskProgressUnits());
-		totalSlayerXp = Math.max(0, totalSlayerXp + direction * run.getRateSlayerXp());
+		totalActualKills = Math.max(0, totalActualKills + direction * run.getActualKills());
+		totalTaskProgressUnits = Math.max(0, totalTaskProgressUnits + direction * run.getTaskProgressUnits());
+		totalSlayerXp = Math.max(0, totalSlayerXp + direction * run.getTotalSlayerXp());
 		if (run.getCannonballsUsed() > 0)
 		{
 			totalCannonballsUsed = Math.max(0,
@@ -262,7 +250,7 @@ public class TaskStatistics
 		{
 			double effectiveKph = run.getActiveMillis() <= 0L
 				? 0.0
-				: run.getRateTaskProgressUnits() * 3_600_000.0 / run.getActiveMillis();
+				: run.getTaskProgressUnits() * 3_600_000.0 / run.getActiveMillis();
 			considerPersonalBest(run.getId(), effectiveKph);
 		}
 	}

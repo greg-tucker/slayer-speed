@@ -5,8 +5,7 @@ import java.util.Objects;
 
 public final class TaskKey
 {
-	private final int timingPolicy;
-    private final String taskName;
+	private final String taskName;
 	private final String taskLocation;
 	private final String encounterProfileId;
 
@@ -17,13 +16,7 @@ public final class TaskKey
 
 	public TaskKey(String taskName, String taskLocation, String encounterProfileId)
 	{
-        this(taskName, taskLocation, encounterProfileId, 0);
-    }
-
-    public TaskKey(String taskName, String taskLocation, String encounterProfileId, int timingPolicy)
-    {
-        this.timingPolicy = timingPolicy;
-        this.taskName = normalizeRequired(taskName);
+		this.taskName = normalizeRequired(taskName);
 		this.taskLocation = normalizeOptional(taskLocation);
 		this.encounterProfileId = normalizeOptional(encounterProfileId);
 	}
@@ -59,8 +52,6 @@ public final class TaskKey
 		return encounterProfileId;
 	}
 
-    public int getTimingPolicy() { return timingPolicy; }
-
 	public boolean hasEncounterProfile()
 	{
 		return !encounterProfileId.isEmpty();
@@ -69,8 +60,9 @@ public final class TaskKey
 	public String asStorageKey()
 	{
 		String assignment = taskLocation.isEmpty() ? taskName : taskName + "|" + taskLocation;
-        String key = encounterProfileId.isEmpty() ? assignment : assignment + "|target:" + encounterProfileId;
-        return timingPolicy == 0 ? key : key + "|timing:" + timingPolicy;
+		return encounterProfileId.isEmpty()
+			? assignment
+			: assignment + "|target:" + encounterProfileId;
 	}
 
 	@Override
@@ -87,13 +79,13 @@ public final class TaskKey
 		TaskKey taskKey = (TaskKey) other;
 		return taskName.equals(taskKey.taskName)
 			&& taskLocation.equals(taskKey.taskLocation)
-			&& encounterProfileId.equals(taskKey.encounterProfileId) && timingPolicy == taskKey.timingPolicy;
+			&& encounterProfileId.equals(taskKey.encounterProfileId);
 	}
 
 	@Override
 	public int hashCode()
 	{
-		return Objects.hash(taskName, taskLocation, encounterProfileId, timingPolicy);
+		return Objects.hash(taskName, taskLocation, encounterProfileId);
 	}
 
 	@Override

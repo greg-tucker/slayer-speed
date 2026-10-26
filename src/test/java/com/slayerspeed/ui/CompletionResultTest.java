@@ -15,7 +15,6 @@ public class CompletionResultTest
         assertTrue(result.getText().contains("First full task"));
         assertFalse(result.getText().contains("New PB"));
         assertTrue(result.getText().contains("Not saved"));
-        assertTrue(result.getText().contains("Legacy timing"));
         assertEquals(run.getId(), result.getRunId());
         assertTrue(result.getHtml().contains("<br>"));
     }

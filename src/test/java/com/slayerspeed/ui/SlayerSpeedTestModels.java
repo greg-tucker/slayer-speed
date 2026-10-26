@@ -48,6 +48,6 @@ final class SlayerSpeedTestModels
 				new EncounterProfileOption("boss:araxxor", "Araxxor (boss)")),
             new com.slayerspeed.calculation.TaskEstimateService().calculate(12, 43, 100000,
                 historyAvailable ? 650 : 0, historyAvailable ? 2000000 : 0, 10, true,
-                historyAvailable ? 3 : 0, "Legacy lifetime history"));
+                historyAvailable ? 3 : 0, "Lifetime history"));
 	}
 }

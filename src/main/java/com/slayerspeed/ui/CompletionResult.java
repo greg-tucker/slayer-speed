@@ -18,11 +18,10 @@ public final class CompletionResult
             + (run.getTaskLocation() == null ? "" : " / " + run.getTaskLocation())
             + "\n" + KphCalculator.formatDuration(OptionalDouble.of(run.getActiveMillis())) + " tracked"
             + " · " + run.getTaskProgressUnits() + " task units"
-            + "\n" + KphCalculator.formatRate(KphCalculator.effectiveKph(run.getRateTaskProgressUnits(), run.getActiveMillis()))
-            + " units/hr · " + KphCalculator.formatXpRate(KphCalculator.slayerXpPerHour(run.getRateSlayerXp(), run.getActiveMillis())) + " XP/hr"
+            + "\n" + KphCalculator.formatRate(KphCalculator.effectiveKph(run.getTaskProgressUnits(), run.getActiveMillis()))
+            + " units/hr · " + KphCalculator.formatXpRate(KphCalculator.slayerXpPerHour(run.getTotalSlayerXp(), run.getActiveMillis())) + " XP/hr"
             + (run.getCannonballsUsed() > 0 ? "\n" + run.getCannonballsUsed() + " cannonballs" : "")
-            + "\n" + (run.getTimingPolicy() == 0 ? "Legacy timing" : "Segmented timing")
-            + " · " + (run.isFullTaskObserved() ? "Full task" : "Partial observation")
+            + "\n" + (run.isFullTaskObserved() ? "Full task" : "Partial observation")
             + "\n" + (saved ? "Saved to personal history" : "Not saved — copy this result and check Help & data");
     }
     public String getRunId() { return runId; }

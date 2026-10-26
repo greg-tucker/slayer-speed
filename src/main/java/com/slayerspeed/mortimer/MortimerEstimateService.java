@@ -44,11 +44,10 @@ public class MortimerEstimateService
 
     public MortimerTaskEstimate estimate(MortimerTaskOffer offer)
     {
-        return estimate(offer, config == null ? EstimateWindow.LIFETIME : config.estimateWindow(),
-            config != null && config.experimentalSegmentedTiming() ? 1 : 0);
+        return estimate(offer, config == null ? EstimateWindow.LIFETIME : config.estimateWindow());
     }
 
-    public MortimerTaskEstimate estimate(MortimerTaskOffer offer, EstimateWindow window, int policy)
+    public MortimerTaskEstimate estimate(MortimerTaskOffer offer, EstimateWindow window)
     {
         HistoryEstimateService service = new HistoryEstimateService();
         String historyTaskName = historyTaskName(offer.getTaskName());
@@ -56,23 +55,9 @@ public class MortimerEstimateService
 			new TaskKey(historyTaskName, null), false);
 		List<TaskStatistics> eligible = new ArrayList<>();
 		boolean hasKnownProfile = false;
-        Map<TaskStatistics, HistoryEstimateService.Selection> selections = new HashMap<>();
-        java.util.Set<String> added = new java.util.HashSet<>();
         for (TaskStatistics raw : taskHistories)
         {
-            if (!added.add(raw.getEncounterProfileId())) { continue; }
-            TaskStatistics primary = null;
-            TaskStatistics legacy = null;
-            for (TaskStatistics candidate : taskHistories)
-            {
-                if (!candidate.getEncounterProfileId().equals(raw.getEncounterProfileId())) { continue; }
-                if (candidate.getTimingPolicy() == policy) { primary = candidate; }
-                if (policy != 0 && candidate.getTimingPolicy() == 0) { legacy = candidate; }
-            }
-            HistoryEstimateService.Selection selection = service.selectWithFallback(primary, legacy, window);
-            TaskStatistics statistics = selection.statistics;
-            if (statistics == null) { continue; }
-            selections.put(statistics, selection);
+            TaskStatistics statistics = service.select(raw, window);
             if (statistics.getTotalTaskProgressUnits() > 0 && statistics.getTotalActiveMillis() > 0)
 			{
 				eligible.add(statistics);
@@ -93,14 +78,13 @@ public class MortimerEstimateService
 		List<MortimerTaskEstimate.ProfileEstimate> estimates = new ArrayList<>();
 		for (TaskStatistics statistics : eligible)
 		{
-            HistoryEstimateService.Selection selection = selections.get(statistics);
-            OptionalDouble minimumMillis = service.estimate(statistics, selection.window, offer.getMinimumAmount()).getEtaMillis();
-            OptionalDouble maximumMillis = service.estimate(statistics, selection.window, offer.getMaximumAmount()).getEtaMillis();
+            OptionalDouble minimumMillis = service.estimate(statistics, window, offer.getMinimumAmount()).getEtaMillis();
+            OptionalDouble maximumMillis = service.estimate(statistics, window, offer.getMaximumAmount()).getEtaMillis();
             if (!minimumMillis.isPresent() || !maximumMillis.isPresent()) { continue; }
             estimates.add(new MortimerTaskEstimate.ProfileEstimate(
                 labelProfiles ? compactProfileName(statistics) : "",
                 formatRange(minimumMillis, maximumMillis), statistics.getCompletedTaskCount(),
-                selection.getScope()));
+                service.scope(statistics, window)));
 		}
 
 		if (estimates.isEmpty())
