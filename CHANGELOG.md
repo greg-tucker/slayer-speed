@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace reflective history-field discovery with an explicit numeric schema; simplify tests to use Guice injection and remove private RuneLite access and automated screenshot/layout assertions.
+
 - Add separate Overlay and Infoboxes settings sections with independent enable switches, preserving existing display preferences. Independently toggle compact time-remaining, physical kills/hr and Slayer XP/hr infoboxes with shared auto-hide, task tooltips and separate positioning identities.
 
 - Fix overlays remaining after disabling the plugin or switching RuneLite configuration profiles: run inventory initialization/cleanup on the client thread and remove the UI immediately on shutdown. Guard queued initialization against rapid disable/re-enable and stop rendering both overlays while disabled (issue #1).

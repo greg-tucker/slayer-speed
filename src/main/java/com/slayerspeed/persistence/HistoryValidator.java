@@ -7,7 +7,6 @@ import com.google.gson.JsonParser;
 import com.slayerspeed.model.SlayerSpeedData;
 import com.slayerspeed.model.ActiveTask;
 import java.math.BigDecimal;
-import java.util.HashMap;
 import com.slayerspeed.model.TaskRun;
 import com.slayerspeed.model.TaskStatistics;
 import java.util.HashSet;
@@ -19,21 +18,19 @@ final class HistoryValidator
 {
     static final int MAX_CHARACTERS = 8 * 1024 * 1024;
 
-    private static final Map<String, Class<?>> NUMERIC_FIELDS = new HashMap<>();
-    static
-    {
-        for (Class<?> type : new Class<?>[] {SlayerSpeedData.class, TaskStatistics.class, TaskRun.class, ActiveTask.class})
-        {
-            for (java.lang.reflect.Field field : type.getDeclaredFields())
-            {
-                if (!java.lang.reflect.Modifier.isStatic(field.getModifiers())
-                    && (field.getType() == int.class || field.getType() == long.class || field.getType() == double.class))
-                {
-                    NUMERIC_FIELDS.put(field.getName(), field.getType());
-                }
-            }
-        }
-    }
+    // Serialized schema fields are explicit so validation needs no reflective access.
+    // Keep these lists aligned with SlayerSpeedData, TaskStatistics, TaskRun and ActiveTask.
+    private static final Set<String> INTEGER_FIELDS = Set.of(
+        "schemaVersion", "timingPolicy", "rateUnits", "rateKills", "rateXp",
+        "measuredUnits", "measuredKills", "measuredXp", "initialAmount", "observedStartAmount",
+        "lastRemainingAmount", "endingAmount", "actualKills", "taskProgressUnits", "killSlayerXp",
+        "bonusSlayerXp", "cannonballsUsed", "totalActualKills", "totalTaskProgressUnits", "totalSlayerXp",
+        "totalCannonballsUsed", "totalCannonRunActualKills", "totalCannonRunTaskProgressUnits", "completedTaskCount");
+    private static final Set<String> LONG_FIELDS = Set.of(
+        "segmentAnchorMillis", "activeMillis", "setupMillis", "startedAtMillis", "lastActivityAtMillis",
+        "lastCheckpointAtMillis", "completionConfirmedAtMillis", "completedAtMillis", "totalActiveMillis",
+        "totalCompletedTaskMillis", "lastUpdatedAtMillis");
+    private static final String DECIMAL_FIELD = "personalBestEffectiveKph";
     private HistoryValidator() {}
 
     static SlayerSpeedData decode(String json, Gson gson)
@@ -139,15 +136,18 @@ final class HistoryValidator
             for (Map.Entry<String, JsonElement> entry : element.getAsJsonObject().entrySet())
             {
                 JsonElement value = entry.getValue();
-                Class<?> numericType = NUMERIC_FIELDS.get(entry.getKey());
-                if (numericType != null && (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()))
+                boolean integerField = INTEGER_FIELDS.contains(entry.getKey());
+                boolean longField = LONG_FIELDS.contains(entry.getKey());
+                boolean decimalField = DECIMAL_FIELD.equals(entry.getKey());
+                if ((integerField || longField || decimalField)
+                    && (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()))
                 {
                     throw new IllegalArgumentException("Numeric fields must contain JSON numbers");
                 }
-                if (numericType != null && numericType != double.class)
+                if (integerField || longField)
                 {
                     BigDecimal exact = value.getAsBigDecimal();
-                    BigDecimal maximum = BigDecimal.valueOf(numericType == long.class ? Long.MAX_VALUE : Integer.MAX_VALUE);
+                    BigDecimal maximum = BigDecimal.valueOf(longField ? Long.MAX_VALUE : Integer.MAX_VALUE);
                     if (exact.signum() < 0 || exact.stripTrailingZeros().scale() > 0 || exact.compareTo(maximum) > 0)
                     {
                         throw new IllegalArgumentException("Numeric value is outside its storage range");
@@ -157,9 +157,9 @@ final class HistoryValidator
                 {
                     double number = value.getAsDouble();
                     if (!Double.isFinite(number) || number < 0
-                        || (!"personalBestEffectiveKph".equals(entry.getKey()) && number != Math.rint(number))
+                        || (!decimalField && number != Math.rint(number))
                         || (entry.getKey().endsWith("Millis") && number > Long.MAX_VALUE)
-                        || (!entry.getKey().endsWith("Millis") && !"personalBestEffectiveKph".equals(entry.getKey())
+                        || (!entry.getKey().endsWith("Millis") && !decimalField
                             && number > Integer.MAX_VALUE))
                     {
                         throw new IllegalArgumentException("Invalid numeric history value");

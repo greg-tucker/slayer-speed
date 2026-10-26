@@ -30,7 +30,7 @@ public class SlayerSpeedPanelDialogTest
         {
             SlayerSpeedPanel panel = new SlayerSpeedPanel(() -> {}, () -> {},
                 (run, excluded) -> {}, run -> {}, id -> {}, new SlayerSpeedConfig() {});
-            panel.update(SlayerSpeedPanelRenderTest.sampleModel(true, false, false), Collections.emptyList());
+            panel.update(SlayerSpeedTestModels.sampleModel(true, false, false), Collections.emptyList());
             panel.updateProgress("profile:task", 100, 100, 50);
             JButton compare = findCompareButton(panel);
             List<Window> originalWindows = java.util.Arrays.asList(Window.getWindows());

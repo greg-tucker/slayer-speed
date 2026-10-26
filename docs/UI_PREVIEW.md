@@ -4,7 +4,7 @@ This uses the actual SlayerSpeedPanel and SlayerSpeedOverlay with RuneLite's loo
 It does not start the game, construct a Client/ConfigManager, or load account history or credentials.
 All runs, rates, completion results and mutations in the preview are synthetic.
 
-The infobox rendering test writes `build/ux-preview/infoboxes.png` using RuneLite's native infobox component. Run `./gradlew test --tests '*SlayerSpeedInfoBoxTest'` to generate this additional preview. The standalone preview window continues to show the sidebar and task overlay.
+Use the standalone preview for visual sidebar and overlay checks, and the development client for native infobox positioning and appearance. Automated tests cover display values, visibility and configuration behaviour rather than generating screenshots or asserting pixel layouts.
 
 ## Open the interactive preview
 From the project folder:
