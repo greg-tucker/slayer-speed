@@ -102,6 +102,17 @@ public class TaskTracker
 			return new TaskUpdate(0, true, ended);
 		}
 
+        int previous = activeTask.getLastRemainingAmount();
+        int current = snapshot.getRemainingAmount();
+        // Detect a new assignment before recovery can overwrite its saved remainder.
+        if (current > previous && snapshot.getInitialAmount() > 0 && current == snapshot.getInitialAmount())
+        {
+            TaskRun ended = finish(TaskRunStatus.REPLACED, nowMillis, separateByLocation, maximumRecentRuns);
+            activeTask = start(snapshot, nowMillis);
+            repository.saveCheckpoint(activeTask);
+            return new TaskUpdate(0, true, ended);
+        }
+
 		if (needsRebaselineAfterLoad)
 		{
 			needsRebaselineAfterLoad = false;
@@ -116,15 +127,6 @@ public class TaskTracker
 			return TaskUpdate.none();
 		}
 
-        int previous = activeTask.getLastRemainingAmount();
-        int current = snapshot.getRemainingAmount();
-        if (current > previous && snapshot.getInitialAmount() > 0 && current == snapshot.getInitialAmount())
-        {
-            TaskRun ended = finish(TaskRunStatus.REPLACED, nowMillis, separateByLocation, maximumRecentRuns);
-            activeTask = start(snapshot, nowMillis);
-            repository.saveCheckpoint(activeTask);
-            return new TaskUpdate(0, true, ended);
-        }
 		activeTask.setLastRemainingAmount(current);
 		int progress = Math.max(0, previous - current);
 		if (progress > 0)

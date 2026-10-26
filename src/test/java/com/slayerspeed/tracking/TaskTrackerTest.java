@@ -194,6 +194,42 @@ public class TaskTrackerTest
         assertEquals(0, tracker.getActiveTask().getTaskProgressUnits());
     }
 
+    @Test public void sameNameResetAfterRestartCannotCarryProgressIntoNewAssignment()
+    {
+        FakeStore store = new FakeStore();
+        TaskTracker original = new TaskTracker(store, new ActiveTimeTracker());
+        original.observe(TaskSnapshot.active("Gargoyles", null, 100, 100), 1000, 5, true, 50);
+        original.observe(TaskSnapshot.active("Gargoyles", null, 100, 80), 61000, 5, true, 50);
+        String previousId = original.getActiveTask().getId();
+        com.google.gson.Gson gson = new com.google.gson.Gson();
+        store.checkpoint = gson.fromJson(gson.toJson(store.checkpoint), ActiveTask.class);
+
+        TaskTracker recovered = new TaskTracker(store, new ActiveTimeTracker());
+        recovered.loadProfile();
+        TaskUpdate replacement = recovered.observe(
+            TaskSnapshot.active("Gargoyles", null, 100, 100), 121000, 5, true, 50);
+        assertTrue(replacement.isTaskStarted());
+        assertNotNull(replacement.getEndedRun());
+        assertEquals(TaskRunStatus.REPLACED, replacement.getEndedRun().getStatus());
+        assertEquals(previousId, replacement.getEndedRun().getId());
+        assertEquals(20, replacement.getEndedRun().getTaskProgressUnits());
+        assertFalse(previousId.equals(recovered.getActiveTask().getId()));
+        assertEquals(0, recovered.getActiveTask().getTaskProgressUnits());
+
+        // The first observed kill belongs entirely to the new assignment.
+        TaskUpdate progress = recovered.observe(
+            TaskSnapshot.active("Gargoyles", null, 100, 99), 181000, 5, true, 50);
+        assertEquals(1, progress.getProgressDelta());
+        recovered.confirmCompletion(241000, 5);
+        recovered.observe(TaskSnapshot.none(), 242000, 5, true, 50);
+        TaskRun completed = recovered.observe(TaskSnapshot.none(), 244000, 5, true, 50).getEndedRun();
+        assertEquals(TaskRunStatus.COMPLETED, completed.getStatus());
+        assertEquals(100, completed.getInitialAmount());
+        assertEquals(100, completed.getTaskProgressUnits());
+        assertTrue(completed.isFullTaskObserved());
+        assertEquals(2, store.runs.size());
+    }
+
     private static final class FakeStore implements TaskHistoryStore
 	{
 		private final List<TaskRun> runs = new ArrayList<>();
