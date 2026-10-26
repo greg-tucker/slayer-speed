@@ -16,7 +16,7 @@ import static org.junit.Assert.*;
 
 public class SlayerSpeedPanelTest
 {
-    @Test public void recordingGapExplainsUnobservedAssignmentProgress() throws Exception
+    @Test public void recordingGapAndUndoReflectTheActualActionState() throws Exception
     {
         SwingUtilities.invokeAndWait(() ->
         {
@@ -25,6 +25,14 @@ public class SlayerSpeedPanelTest
             JLabel recorded = (JLabel) named(panel, "recordedProgress");
             assertTrue(recorded.getText().contains("68 units"));
             assertTrue(recorded.getToolTipText().contains("4 assignment units"));
+            AtomicInteger actions = new AtomicInteger();
+            panel.setDataActions(action -> { assertEquals("undo", action); actions.incrementAndGet(); });
+            panel.setUndoAvailable(true);
+            ((JButton) named(panel, "inlineUndo")).doClick();
+            panel.setUndoAvailable(false);
+            ((JButton) named(panel, "inlineUndo")).doClick();
+            assertEquals(1, actions.get());
+            assertFalse(named(panel, "inlineUndoNotice").isVisible());
         });
     }
 

@@ -77,6 +77,10 @@ public class SlayerSpeedPanel extends PluginPanel
         completionResult = result;
         completionActions.setVisible(config.showCompletionSummary() && result != null);
     }
+    private Consumer<String> dataActions = action -> {};
+    private boolean undoAvailable;
+    private final JPanel undoNotice = fullWidthPanel(new BorderLayout(6, 0), ColorScheme.DARKER_GRAY_COLOR);
+    private final JButton inlineUndo = new JButton("Undo");
     private SlayerSpeedViewModel shownModel = SlayerSpeedViewModel.noTask();
     private final JPanel taskOptions = fullWidthBoxPanel(ColorScheme.DARK_GRAY_COLOR);
     private final JPanel historySection = fullWidthBoxPanel(ColorScheme.DARK_GRAY_COLOR);
@@ -96,6 +100,12 @@ public class SlayerSpeedPanel extends PluginPanel
         simpleMode.setEnabled(true); detailedMode.setEnabled(true);
     }
 
+    public void setDataActions(Consumer<String> actions) { dataActions = actions; }
+    public void setUndoAvailable(boolean available)
+    {
+        undoAvailable = available;
+        undoNotice.setVisible(available);
+    }
     private final JLabel taskLabel = new JLabel("No active Slayer task", SwingConstants.CENTER);
 	private final JLabel taskStatusLabel = new JLabel("", SwingConstants.CENTER);
 	private final JLabel completionSummaryLabel = new JLabel("", SwingConstants.CENTER);
@@ -453,6 +463,16 @@ public class SlayerSpeedPanel extends PluginPanel
 		addGap(5);
         historySection.add(historyPanel);
         add(historySection);
+        JLabel deletedLabel = new JLabel("Run deleted");
+        deletedLabel.setForeground(Color.LIGHT_GRAY);
+        undoNotice.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+        undoNotice.add(deletedLabel, BorderLayout.CENTER);
+        undoNotice.add(inlineUndo, BorderLayout.EAST);
+        undoNotice.setName("inlineUndoNotice"); inlineUndo.setName("inlineUndo");
+        inlineUndo.setToolTipText("Available for up to 30 seconds, until history or account changes");
+        inlineUndo.addActionListener(e -> { if (undoAvailable) { dataActions.accept("undo"); } });
+        undoNotice.setVisible(false);
+        add(undoNotice);
 
 		addGap(10);
 
@@ -1138,6 +1158,13 @@ public class SlayerSpeedPanel extends PluginPanel
 		menu.show(anchor, 0, anchor.getHeight());
 	}
 
+    private void addDataAction(JPopupMenu menu, String label, String action)
+    {
+        JMenuItem item = new JMenuItem(label);
+        item.addActionListener(event -> dataActions.accept(action));
+        menu.add(item);
+    }
+
     public void updateProgress(String context, int initial, int observedStart, int remaining)
     {
         updateProgress(context, initial, observedStart, remaining, -1);
@@ -1201,6 +1228,13 @@ public class SlayerSpeedPanel extends PluginPanel
         stored.setName("storedStatsDebugButton");
         stored.addActionListener(event -> showStoredStatsDebug());
         menu.add(stored);
+        addDataAction(menu, "Export history...", "export");
+        addDataAction(menu, "Export recovery backup...", "exportBackup");
+        addDataAction(menu, "Import and replace history...", "replace");
+        addDataAction(menu, "Merge complete retained history...", "merge");
+        addDataAction(menu, "Restore last backup...", "backup");
+        addDataAction(menu, "Recover checkpoint from file...", "recoverCheckpoint");
+        if (undoAvailable) { addDataAction(menu, "Undo last deletion", "undo"); }
         if (recoveryPayload != null)
         {
             JMenuItem recover = new JMenuItem("View original data for recovery...");
@@ -1213,6 +1247,7 @@ public class SlayerSpeedPanel extends PluginPanel
                     "Original data — select and copy to preserve", JOptionPane.INFORMATION_MESSAGE);
             });
             menu.add(recover);
+            addDataAction(menu, "Export original then start fresh...", "fresh");
             menu.show(anchor, 0, anchor.getHeight());
             return;
         }
@@ -1222,7 +1257,7 @@ public class SlayerSpeedPanel extends PluginPanel
 		menu.add(resetCurrent);
 		JMenuItem resetAll = new JMenuItem("Reset all history...");
 		resetAll.addActionListener(event -> confirmReset(
-			"Reset all Slayer Task Speed history? This cannot be undone.", resetAllHistory));
+			"Reset all Slayer Task Speed history? A recovery backup will be kept.", resetAllHistory));
 		menu.add(resetAll);
 		menu.show(anchor, 0, anchor.getHeight());
 	}
@@ -1385,7 +1420,7 @@ public class SlayerSpeedPanel extends PluginPanel
         String context = previewContext;
 		int choice = JOptionPane.showConfirmDialog(
 			this,
-			"Delete this recorded task run? This cannot be undone. You can exclude it from averages instead.",
+			"Delete this recorded task run? Undo is available in Help & data for 30 seconds, until history changes.",
 			"Delete task run",
 			JOptionPane.YES_NO_OPTION,
 			JOptionPane.WARNING_MESSAGE);

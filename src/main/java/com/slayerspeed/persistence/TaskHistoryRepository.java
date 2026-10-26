@@ -1,6 +1,7 @@
 package com.slayerspeed.persistence;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonParseException;
 import com.slayerspeed.SlayerSpeedConfig;
 import com.slayerspeed.model.ActiveTask;
 import com.slayerspeed.model.SlayerSpeedData;
@@ -25,6 +26,127 @@ public class TaskHistoryRepository implements TaskHistoryStore
 
 	private final ProfileStorage storage;
     private String recoveryPayload;
+    private String undoStatistics;
+    private String undoKey;
+    private String undoProfile;
+    private long undoExpires;
+    private long undoRevision;
+
+    public enum ImportMode { REPLACE, MERGE, RECOVER_CHECKPOINT }
+
+    public static final class ImportPreview
+    {
+        private final String profile;
+        private final long revision;
+        private final String encoded;
+        private final ImportMode mode;
+        private final String summary;
+        private ImportPreview(String profile, long revision, String encoded, ImportMode mode, String summary)
+        {
+            this.profile = profile; this.revision = revision; this.encoded = encoded;
+            this.mode = mode; this.summary = summary;
+        }
+        public String getSummary() { return summary; }
+    }
+
+    public String exportHistory(boolean checkpoint)
+    {
+        if (!isLoadedProfileCurrent()) { throw new IllegalStateException("No current account profile"); }
+        if (loadState == LoadState.RECOVERY_REQUIRED)
+        {
+            return recoveryPayload;
+        }
+        return HistoryTransfer.exportData(data, gson, checkpoint);
+    }
+
+    public String getBackup()
+    {
+        if (!isLoadedProfileCurrent()) { throw new IllegalStateException("Account changed"); }
+        String backup = storage.read("historyBackup");
+        if (backup == null) { throw new IllegalStateException("No recovery backup is available"); }
+        return backup;
+    }
+
+    public ImportPreview previewImport(String text, ImportMode mode, int limit)
+    {
+        if (!isLoadedProfileCurrent()) { throw new IllegalStateException("No current account profile"); }
+        SlayerSpeedData imported = HistoryTransfer.parse(text, gson);
+        if (mode == ImportMode.RECOVER_CHECKPOINT && data.getCheckpointedActiveTask() != null)
+        {
+            throw new IllegalStateException("Checkpoint recovery requires no active task");
+        }
+        if (mode == ImportMode.MERGE)
+        {
+            if (!isPersistenceAvailable()) { throw new IllegalStateException("Recover history before merging"); }
+            imported = HistoryTransfer.merge(data, imported, gson, limit);
+        }
+        if (mode != ImportMode.RECOVER_CHECKPOINT) { imported.setCheckpointedActiveTask(null); }
+        int count = imported.getStatisticsByTaskKey().values().stream().mapToInt(stats -> stats.getRecentRuns().size()).sum();
+        String summary = mode + ": " + imported.getStatisticsByTaskKey().size() + " task profiles, " + count
+            + " retained runs. Existing data will be backed up."
+            + (mode == ImportMode.RECOVER_CHECKPOINT ? " Includes a compatible saved checkpoint if present."
+                : " Current active assignment is preserved.");
+        return new ImportPreview(loadedProfileKey, historyRevision, encode(imported), mode, summary);
+    }
+
+    public void applyImport(ImportPreview preview)
+    {
+        if (!isLoadedProfileCurrent() || !java.util.Objects.equals(preview.profile, loadedProfileKey)
+            || preview.revision != historyRevision)
+        {
+            throw new IllegalStateException("Account or history changed. Preview the import again.");
+        }
+        if (preview.mode == ImportMode.RECOVER_CHECKPOINT && data.getCheckpointedActiveTask() != null)
+        {
+            throw new IllegalStateException("A task started since preview. Checkpoint was not replaced.");
+        }
+        SlayerSpeedData replacement = HistoryValidator.decode(preview.encoded, gson);
+        if (preview.mode != ImportMode.RECOVER_CHECKPOINT)
+        {
+            replacement.setCheckpointedActiveTask(data.getCheckpointedActiveTask());
+        }
+        String serialized = encode(replacement);
+        // The current checkpoint may have changed since preview. Validate it with
+        // the imported runs before modifying either history or its recovery backup.
+        HistoryValidator.decode(serialized, gson);
+        backupCurrent();
+        storage.write(DATA_KEY, serialized); // Commit succeeds before replacing live repository state.
+        data = replacement;
+        lastSaveFailed = false;
+        recoveryPayload = null;
+        loadState = LoadState.LOADED;
+        historyRevision++;
+        undoStatistics = null;
+    }
+
+    private void backupCurrent()
+    {
+        if (!isLoadedProfileCurrent()) { throw new IllegalStateException("Account changed"); }
+        String original = storage.read(DATA_KEY);
+        if (original != null)
+        {
+            // Even an oversized unreadable original must remain recoverable. If storage refuses
+            // the backup write, the transaction fails before replacing the original data.
+            // Preserve unreadable data separately, never overwriting the last-good backup.
+            storage.write(loadState == LoadState.RECOVERY_REQUIRED ? "historyUnreadableBackup" : "historyBackup", original);
+        }
+    }
+
+    public boolean canUndoDeletion()
+    {
+        return undoStatistics != null && isPersistenceAvailable()
+            && java.util.Objects.equals(undoProfile, loadedProfileKey)
+            && undoRevision == historyRevision && System.currentTimeMillis() < undoExpires;
+    }
+
+    public void undoDeletion()
+    {
+        if (!canUndoDeletion()) { throw new IllegalStateException("Undo expired or history/account changed"); }
+        data.getStatisticsByTaskKey().put(undoKey, gson.fromJson(undoStatistics, TaskStatistics.class));
+        historyRevision++;
+        undoStatistics = null;
+        save();
+    }
     private boolean lastSaveFailed;
     private LoadState loadState = LoadState.EMPTY;
 
@@ -41,7 +163,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
     {
         if (loadState == LoadState.RECOVERY_REQUIRED)
         {
-            return "Saved history could not be loaded. Tracking in memory only; open Help & data to copy the original records.";
+            return "Saved history could not be loaded. Tracking in memory only; open Help & data to recover.";
         }
         if (lastSaveFailed) { return "History could not be saved. Tracking in memory; saving will retry at the next checkpoint."; }
         return isLoadedProfileCurrent() ? "" : "Tracking in memory only until an account profile is available.";
@@ -99,6 +221,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
         historyRevision++;
         data = new SlayerSpeedData();
         recoveryPayload = null;
+        undoStatistics = null;
         loadState = LoadState.EMPTY;
         lastSaveFailed = false;
         loadedProfileKey = currentProfileKey();
@@ -266,6 +389,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 
 	public void deleteTask(TaskKey key, boolean separateByLocation)
     {
+        if (isPersistenceAvailable()) { backupCurrent(); }
         historyRevision++;
 		boolean changed;
 		if (!separateByLocation)
@@ -318,8 +442,14 @@ public class TaskHistoryRepository implements TaskHistoryStore
         historyRevision++;
         TaskKey key = run.taskKey(true);
         TaskStatistics statistics = data.getStatisticsByTaskKey().get(key.asStorageKey());
+        String before = statistics == null ? null : gson.toJson(statistics);
         if (statistics != null && statistics.deleteRun(run.getId()))
 		{
+            undoStatistics = before;
+            undoKey = key.asStorageKey();
+            undoProfile = loadedProfileKey;
+            undoRevision = historyRevision;
+            undoExpires = System.currentTimeMillis() + 30000;
             if (statistics.getRecentRuns().isEmpty()
 				&& statistics.getTotalTaskProgressUnits() == 0
 				&& statistics.getCompletedTaskCount() == 0)
@@ -334,6 +464,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 	{
         historyRevision++;
         if (!isPersistenceAvailable()) { return; }
+        backupCurrent();
         if (isLoadedProfileCurrent())
         {
             try

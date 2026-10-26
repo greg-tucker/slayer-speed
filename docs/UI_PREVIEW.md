@@ -15,7 +15,8 @@ From the project folder:
 
 Choose a scenario, sidebar and overlay detail independently, width and font size. The real sidebar
 buttons, search, history expansion, encounter selection and Compare dialog work. Delete/exclude/reset
-operate only on synthetic history. Export PNGs in the preview toolbar writes
+operate only on synthetic history; Undo restores that synthetic snapshot for up to 30 seconds.
+Import/export/recovery menu items are explanatory stubs. Export PNGs in the preview toolbar writes
 images to build/ux-preview; it does not export account data.
 Close the preview window to stop it. No Jagex login setup is needed.
 

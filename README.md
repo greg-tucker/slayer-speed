@@ -44,11 +44,11 @@ Mortimer's task-choice estimates remain experimental and disabled by default. Th
 
 History is stored in RuneLite's account-specific profile data. This plugin has no operated server and makes no network requests of its own.
 
-**Help & data** lets you inspect and copy stored task records, or reset history. You can exclude an individual run from averages without deleting it. Deletions cannot be undone.
+**Help & data** offers JSON export, full backups, reviewed imports, backup restore and Undo for a deleted run. Normal import preserves the active assignment; checkpoint recovery is a separate action. Merge is available only when retained records can reconstruct all totals, so old pruned history cannot be accidentally counted twice. Undo lasts 30 seconds and ends when history changes.
 
 Saved history uses schema 5. Schema upgrades keep a pre-migration backup. Ordinary schema-6 history from the development build can return to schema 5 with a backup; experimental timing history is preserved for recovery. See [recovery and rollback](./docs/RECOVERY_AND_ROLLBACK.md).
 
-If history cannot be read, the original payload is preserved and automatic saves are blocked. The sidebar explains that new tracking is in memory only; **Help & data → View original data for recovery** lets you copy the original contents. Import, merge, file export, backup restore, checkpoint recovery and deletion Undo are deferred to the `codex/history-transfer-recovery` branch.
+**Help & data** also contains stored records and recovery controls. If history cannot be read, the original payload is preserved and the sidebar explains that new tracking is in memory only. Copy the original data before attempting recovery; changing accounts does not transfer that history.
 
 ## Troubleshooting
 

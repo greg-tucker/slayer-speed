@@ -1,5 +1,6 @@
 package com.slayerspeed.ui;
 
+import com.google.gson.Gson;
 import com.slayerspeed.*;
 import com.slayerspeed.calculation.*;
 import com.slayerspeed.model.*;
@@ -26,8 +27,11 @@ public final class SlayerSpeedPreview
         @Override public SlayerSpeedDisplayMode displayMode() { return mode; }
     }
     private final PreviewConfig config = new PreviewConfig();
+    private final Gson gson = new Gson();
     private Scene scene = Scene.ACTIVE;
     private List<TaskStatistics> history = sampleHistory();
+    private List<TaskStatistics> undo;
+    private long undoUntil;
     private String selectedEncounter = EncounterProfileOption.AUTO_ID;
     private boolean completionDismissed;
     private SlayerSpeedPanel sidebar;
@@ -42,6 +46,7 @@ public final class SlayerSpeedPreview
     private final JSpinner fontSize = new JSpinner(new SpinnerNumberModel(12, 10, 18, 1));
     private final JComboBox<SlayerSpeedDisplayMode> modes = new JComboBox<>(SlayerSpeedDisplayMode.values());
     private boolean gameFont;
+    private javax.swing.Timer timer;
 
     public SlayerSpeedPreview()
     {
@@ -104,6 +109,17 @@ public final class SlayerSpeedPreview
             id -> { selectedEncounter = id; refresh(); }, config);
         sidebar.setDisplayModeAction(mode -> { config.mode = mode; refresh(); });
         sidebar.setDismissCompletionAction(() -> { completionDismissed = true; refresh(); });
+        sidebar.setDataActions(action ->
+        {
+            if (action.equals("undo") && undo != null && System.currentTimeMillis() < undoUntil)
+            {
+                history = undo; undo = null; refresh();
+            }
+            else
+            {
+                JOptionPane.showMessageDialog(root, "Preview action: " + action + "\nOnly synthetic data is available. No files or account history are changed.");
+            }
+        });
         sidebarHost.removeAll();
         JScrollPane scroll = new JScrollPane(sidebar);
         scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -112,15 +128,18 @@ public final class SlayerSpeedPreview
 
     private void delete(TaskRun run)
     {
+        undo = new ArrayList<>();
+        for (TaskStatistics stats : history) { undo.add(gson.fromJson(gson.toJson(stats), TaskStatistics.class)); }
         history.forEach(h -> h.deleteRun(run.getId()));
         history.removeIf(h -> h.getRecentRuns().isEmpty() && h.getTotalTaskProgressUnits() == 0);
+        undoUntil = System.currentTimeMillis() + 30000;
         refresh();
     }
-    private void changed() { refresh(); }
+    private void changed() { undo = null; refresh(); }
     private void resetScenario()
     {
         history = scene == Scene.EMPTY || scene == Scene.FIRST_TASK ? new ArrayList<>() : sampleHistory();
-        completionDismissed = false; selectedEncounter = EncounterProfileOption.AUTO_ID;
+        undo = null; completionDismissed = false; selectedEncounter = EncounterProfileOption.AUTO_ID;
         createSidebar(); refresh();
         if (scene == Scene.DELETED) { delete(history.get(2).getRecentRuns().get(0)); }
     }
@@ -177,6 +196,7 @@ public final class SlayerSpeedPreview
         sidebar.updateProgress("preview:" + scene, model.isActive() ? 174 : 0, 174,
             model.isActive() ? (scene == Scene.FIRST_TASK ? 172 : 102) : 0,
             model.isActive() ? (scene == Scene.FIRST_TASK ? 2 : 68) : -1);
+        sidebar.setUndoAvailable(undo != null && System.currentTimeMillis() < undoUntil);
         sidebar.updateCompletion(completion());
         sidebarHost.setPreferredSize(new Dimension((Integer) width.getValue() + 18, 700));
         overlayHost.removeAll();
@@ -294,6 +314,14 @@ public final class SlayerSpeedPreview
                 frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
                 frame.setContentPane(preview.root); frame.setSize(850, 1000); frame.setLocationByPlatform(true);
                 frame.setVisible(true);
+                preview.timer = new javax.swing.Timer(1000, e ->
+                {
+                    if (preview.undo != null && System.currentTimeMillis() >= preview.undoUntil)
+                    {
+                        preview.undo = null; preview.refresh();
+                    }
+                });
+                preview.timer.start();
                 System.out.println("Standalone preview ready. Close the window to stop it.");
             }
         });

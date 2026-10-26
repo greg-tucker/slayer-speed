@@ -37,7 +37,7 @@ public class HistoryRecoveryTest
         }
     }
 
-    @Test public void oversizedOriginalRemainsAvailableForCopyingAndCannotBeOverwritten()
+    @Test public void oversizedOriginalCanBeRecoveredWithoutLosingItsBackup()
     {
         MemoryStorage storage = new MemoryStorage();
         String original = "x".repeat(HistoryValidator.MAX_CHARACTERS + 1);
@@ -45,12 +45,11 @@ public class HistoryRecoveryTest
         TaskHistoryRepository repo = TaskHistoryRepository.forStorage(storage, new Gson());
         repo.loadProfile();
         assertEquals(TaskHistoryRepository.LoadState.RECOVERY_REQUIRED, repo.getLoadState());
-        repo.saveCheckpoint(new ActiveTask("Gargoyles", null, 100, 100, 1000));
-        repo.deleteAll();
-        assertEquals(original, storage.read(TaskHistoryRepository.DATA_KEY));
-        assertEquals(original, repo.getRecoveryPayload());
-        assertFalse(repo.isPersistenceAvailable());
-        assertTrue(repo.getStorageMessage().contains("copy the original"));
+        TaskHistoryRepository.ImportPreview preview = repo.previewImport(
+            "{\"schemaVersion\":5,\"statisticsByTaskKey\":{}}", TaskHistoryRepository.ImportMode.REPLACE, 50);
+        repo.applyImport(preview);
+        assertEquals(original, storage.read("historyUnreadableBackup"));
+        assertTrue(repo.isPersistenceAvailable());
     }
 
     @Test public void failedWritesAreVisibleAndRetryWithoutLosingTheTask()
