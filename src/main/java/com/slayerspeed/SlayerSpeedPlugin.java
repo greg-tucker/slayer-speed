@@ -150,6 +150,7 @@ public class SlayerSpeedPlugin extends Plugin
 	private com.slayerspeed.ui.CompletionResult lastCompletionResult;
 	private volatile SlayerSpeedViewModel viewModel = SlayerSpeedViewModel.noTask();
     private volatile boolean overlayTaskAvailable;
+    private volatile boolean running;
     private volatile long overlayLastRelevantAt;
     private volatile int overlayIdleMinutes = 2;
     private long lastPanelInteractionAt;
@@ -158,6 +159,7 @@ public class SlayerSpeedPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
+        running = true;
 		panel = new SlayerSpeedPanel(
 			() -> dispatchPanelAction(this::resetCurrentTaskHistory),
 			() -> dispatchPanelAction(this::resetAllHistory),
@@ -169,17 +171,14 @@ public class SlayerSpeedPlugin extends Plugin
         panel.setDisplayModeAction(mode -> dispatchPanelAction(() ->
         {
             configManager.setConfiguration(SlayerSpeedConfig.GROUP, "displayMode", mode);
-            refreshView();
         }));
         panel.setPauseAction(() -> dispatchPanelAction(() ->
         {
             taskTracker.toggleManualPause(activityTimeMillis());
-            refreshView();
         }));
         panel.setDismissCompletionAction(() -> dispatchPanelAction(() ->
         {
             lastCompletionResult = null;
-            refreshView();
         }));
         panel.setDataActions(new com.slayerspeed.ui.HistoryFileActions(panel, clientThread,
             historyRepository, config, this::refreshView, taskTracker::loadProfile));
@@ -192,26 +191,29 @@ public class SlayerSpeedPlugin extends Plugin
 		clientToolbar.addNavigation(navigationButton);
 		overlayManager.add(overlay);
 		overlayManager.add(mortimerChoiceOverlay);
-		ensureProfileLoaded();
-		if (client.getGameState() == GameState.LOGGED_IN)
-		{
-			resetCannonballTracker();
-		}
-		refreshView();
+        SlayerSpeedPanel startedPanel = panel;
+        clientThread.invoke(() ->
+        {
+            // Disable/re-enable can happen before this queued initialization runs.
+            if (!running || panel != startedPanel) { return; }
+            ensureProfileLoaded();
+            if (client.getGameState() == GameState.LOGGED_IN)
+            {
+                resetCannonballTracker();
+            }
+            refreshView();
+        });
 		log.debug("SlayerSpeed started");
 	}
 
 	@Override
 	protected void shutDown()
 	{
+        // RuneLite invokes lifecycle callbacks on the EDT. Remove the UI before
+        // scheduling any inventory reads or checkpoint work on the client thread.
+        running = false;
         overlayTaskAvailable = false;
-        lastPanelInteractionAt = 0L;
-        lastSlayerCombatAt = 0L;
-		flushCannonballs();
-		taskTracker.pause();
-		attributionService.reset();
-		slayerXpTracker.reset();
-		cannonballTracker.clear();
+        pendingUi = null;
 		overlayManager.remove(overlay);
 		overlayManager.remove(mortimerChoiceOverlay);
 		if (navigationButton != null)
@@ -220,15 +222,46 @@ public class SlayerSpeedPlugin extends Plugin
 		}
 		panel = null;
 		navigationButton = null;
-		loadedProfileKey = null;
-		lastCompletionResult = null;
 		viewModel = SlayerSpeedViewModel.noTask();
+        clientThread.invoke(this::stopTracking);
 		log.debug("SlayerSpeed stopped");
 	}
+
+    private void stopTracking()
+    {
+        try
+        {
+            flushCannonballs();
+        }
+        catch (RuntimeException ex)
+        {
+            log.warn("Could not read final cannon ammunition during shutdown", ex);
+        }
+        finally
+        {
+            try
+            {
+                taskTracker.pause();
+            }
+            finally
+            {
+                attributionService.reset();
+                slayerXpTracker.reset();
+                cannonballTracker.clear();
+                loadedProfileKey = null;
+                lastCompletionResult = null;
+                lastPanelInteractionAt = 0L;
+                lastSlayerCombatAt = 0L;
+                lastActivityTick = Integer.MIN_VALUE;
+                tickActivityTime = 0L;
+            }
+        }
+    }
 
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+        if (!running) { return; }
 		int tick = client.getTickCount();
 		attributionService.advanceTick(tick);
 		if (client.getGameState() != GameState.LOGGED_IN)
@@ -437,9 +470,11 @@ public class SlayerSpeedPlugin extends Plugin
 
     public boolean isOverlayVisible()
     {
-        return overlayTaskAvailable && isOverlayRecent(
+        return running && overlayTaskAvailable && isOverlayRecent(
             System.currentTimeMillis(), overlayLastRelevantAt, overlayIdleMinutes);
     }
+
+    public boolean isRunning() { return running; }
 
     static boolean isOverlayRecent(long now, long lastRelevantAt, int timeoutMinutes)
     {
@@ -486,7 +521,6 @@ public class SlayerSpeedPlugin extends Plugin
 			active.setManualEncounterProfile(selection.profilesById.get(profileId));
 		}
 		taskTracker.checkpoint();
-		refreshView();
 	}
 
 	private void ensureProfileLoaded()
@@ -514,20 +548,17 @@ public class SlayerSpeedPlugin extends Plugin
 		{
 			historyRepository.deleteTask(
 				active.taskKey(config.separateByLocation()), config.separateByLocation());
-			refreshView();
 		}
 	}
 
 	private void setRunExcluded(TaskRun run, boolean excluded)
 	{
 		historyRepository.setRunExcluded(run, excluded);
-		refreshView();
 	}
 
 	private void deleteRun(TaskRun run)
 	{
 		historyRepository.deleteRun(run);
-		refreshView();
 	}
 
 	private void resetAllHistory()
@@ -535,7 +566,6 @@ public class SlayerSpeedPlugin extends Plugin
 		historyRepository.deleteAll();
 		lastCompletionResult = null;
 		taskTracker.checkpoint();
-		refreshView();
 	}
 
     @Subscribe
@@ -549,13 +579,14 @@ public class SlayerSpeedPlugin extends Plugin
 
     private void dispatchPanelAction(Runnable action)
     {
+        // Panel mutations share one refresh here; their callbacks only change state.
         SlayerSpeedPanel target = panel;
         String expected = target == null ? "" : target.getActionContext();
         clientThread.invoke(() ->
         {
             ActiveTask active = taskTracker.getActiveTask();
             String current = loadedProfileKey + ":" + (active == null ? "" : active.getId());
-            if (target == panel && expected.equals(current)
+            if (running && target == panel && expected.equals(current)
                 && java.util.Objects.equals(loadedProfileKey, historyRepository.getProfileIdentity()))
             {
                 lastPanelInteractionAt = System.currentTimeMillis();
@@ -567,6 +598,7 @@ public class SlayerSpeedPlugin extends Plugin
 
     private void refreshView()
     {
+        if (!running) { return; }
         viewModel = createViewModel();
         ActiveTask overlayTask = taskTracker.getActiveTask();
         overlayIdleMinutes = config.overlayIdleMinutes();

@@ -1220,6 +1220,7 @@ public class SlayerSpeedPanel extends PluginPanel
 
     private void showPreview()
     {
+        if (previewDialog != null) { previewDialog.dispose(); previewDialog = null; }
         JOptionPane pane = new JOptionPane(new TaskPreviewPanel(storedStatistics, previewRemaining, config.estimateWindow()),
             JOptionPane.PLAIN_MESSAGE);
         previewDialog = pane.createDialog(this, "Compare personal task estimates");

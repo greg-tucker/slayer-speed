@@ -15,8 +15,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '11'
+      - name: Install virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb xauth
       - name: Compile and test
-        run: bash ./gradlew test --console=plain
+        run: xvfb-run -a bash ./gradlew test -PrequireDisplay --console=plain
       - name: Retain test reports
         if: failure()
         uses: actions/upload-artifact@v4

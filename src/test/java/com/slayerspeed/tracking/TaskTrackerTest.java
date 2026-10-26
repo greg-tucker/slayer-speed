@@ -3,6 +3,7 @@ package com.slayerspeed.tracking;
 import com.slayerspeed.model.ActiveTask;
 import com.slayerspeed.model.TaskRun;
 import com.slayerspeed.model.TaskRunStatus;
+import com.slayerspeed.model.TaskStatistics;
 import com.slayerspeed.persistence.TaskHistoryStore;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +11,8 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class TaskTrackerTest
 {
@@ -103,6 +106,54 @@ public class TaskTrackerTest
 		assertEquals(1, nextKill.getProgressDelta());
 		assertEquals(1, tracker.getActiveTask().getTaskProgressUnits());
 	}
+
+    @Test
+    public void missedProgressAfterRecoveryCannotCountAsFullTaskOrPersonalBest()
+    {
+        TaskRun run = completeRecoveredTask(20);
+        assertEquals(30, run.getTaskProgressUnits());
+        assertFalse(run.isFullTaskObserved());
+        TaskStatistics statistics = new TaskStatistics("Gargoyles", null);
+        statistics.addRun(run, 50);
+        assertEquals(30, statistics.getTotalTaskProgressUnits());
+        assertTrue(statistics.getTotalActiveMillis() > 0);
+        assertEquals(0, statistics.getCompletedTaskCount());
+        assertEquals(0L, statistics.getTotalCompletedTaskMillis());
+        assertFalse(statistics.isPersonalBest(run));
+    }
+
+    @Test
+    public void recoveryWithoutMissedProgressPreservesFullTaskEligibility()
+    {
+        TaskRun run = completeRecoveredTask(90);
+        assertEquals(100, run.getTaskProgressUnits());
+        assertTrue(run.isFullTaskObserved());
+        TaskStatistics statistics = new TaskStatistics("Gargoyles", null);
+        statistics.addRun(run, 50);
+        assertEquals(1, statistics.getCompletedTaskCount());
+        assertTrue(statistics.isPersonalBest(run));
+    }
+
+    private TaskRun completeRecoveredTask(int recoveredRemaining)
+    {
+        FakeStore store = new FakeStore();
+        TaskTracker original = new TaskTracker(store, new ActiveTimeTracker());
+        original.observe(TaskSnapshot.active("Gargoyles", null, 100, 100), 1_000, 5, true, 50);
+        original.observe(TaskSnapshot.active("Gargoyles", null, 100, 90), 61_000, 5, true, 50);
+        TaskTracker recovered = new TaskTracker(store, new ActiveTimeTracker());
+        recovered.loadProfile();
+        recovered.observe(TaskSnapshot.active("Gargoyles", null, 100, recoveredRemaining), 361_000, 5, true, 50);
+        // Repeat recovery to verify a partial recording never regains full eligibility.
+        com.google.gson.Gson gson = new com.google.gson.Gson();
+        store.checkpoint = gson.fromJson(gson.toJson(store.checkpoint), ActiveTask.class);
+        recovered = new TaskTracker(store, new ActiveTimeTracker());
+        recovered.loadProfile();
+        recovered.observe(TaskSnapshot.active("Gargoyles", null, 100, recoveredRemaining), 362_000, 5, true, 50);
+        recovered.observe(TaskSnapshot.active("Gargoyles", null, 100, 10), 421_000, 5, true, 50);
+        recovered.confirmCompletion(481_000, 5);
+        recovered.observe(TaskSnapshot.none(), 482_000, 5, true, 50);
+        return recovered.observe(TaskSnapshot.none(), 484_000, 5, true, 50).getEndedRun();
+    }
 
 	@Test
 	public void marksChangedTaskAsReplaced()

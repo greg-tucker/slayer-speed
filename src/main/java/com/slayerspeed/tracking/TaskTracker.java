@@ -115,6 +115,12 @@ public class TaskTracker
 		if (needsRebaselineAfterLoad)
 		{
 			needsRebaselineAfterLoad = false;
+            if (snapshot.getRemainingAmount() != activeTask.getLastRemainingAmount())
+            {
+                // Preserve observed rate samples, but a gap in progress cannot count
+                // as a fully observed task duration or personal best.
+                activeTask.markPartialObservation();
+            }
 			activeTask.setLastRemainingAmount(snapshot.getRemainingAmount());
 			repository.saveCheckpoint(activeTask);
 			return TaskUpdate.none();

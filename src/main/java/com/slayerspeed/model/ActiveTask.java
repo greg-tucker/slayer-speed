@@ -308,6 +308,11 @@ public class ActiveTask
 		return fullTaskObserved;
 	}
 
+    public void markPartialObservation()
+    {
+        fullTaskObserved = false;
+    }
+
 	public int getLastRemainingAmount()
 	{
 		return lastRemainingAmount;

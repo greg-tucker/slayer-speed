@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fix overlays remaining after disabling the plugin or switching RuneLite configuration profiles: run inventory initialization/cleanup on the client thread and remove the UI immediately on shutdown. Guard queued initialization against rapid disable/re-enable and stop rendering both overlays while disabled (issue #1).
+
+- Cover plugin logout, account switching, restart and overlay visibility through lifecycle tests; require real dialog coverage under a virtual display in CI.
+- Refresh the sidebar once after each dispatched panel action instead of repeating the same calculations.
+
+- Mark checkpoint recordings with missed progress as partial so they cannot distort full-task durations or personal bests.
+- Close the previous comparison window before opening another, keeping task/account cleanup effective.
+
 - Hide the task overlay after two minutes without Slayer activity or sidebar interaction (configurable, 0 disables idle hiding); restore it on activity or opening the sidebar, and hide on logout or task completion. Task timing and saved history are unaffected.
 
 - Reduce Simple-mode clutter: keep the current-task summary visible, disclose task options and history on demand, and reserve the finish clock for Detailed mode.

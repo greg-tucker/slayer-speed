@@ -1,6 +1,7 @@
 package com.slayerspeed.ui;
 
 import com.slayerspeed.SlayerSpeedConfig;
+import com.slayerspeed.SlayerSpeedPlugin;
 import com.slayerspeed.mortimer.MortimerEstimateService;
 import com.slayerspeed.mortimer.MortimerTaskChoiceParser;
 import com.slayerspeed.mortimer.MortimerTaskEstimate;
@@ -28,15 +29,18 @@ public class MortimerChoiceOverlay extends Overlay
 	private static final Color SHADOW = new Color(0, 0, 0, 230);
 
 	private final SlayerSpeedConfig config;
+    private final SlayerSpeedPlugin plugin;
 	private final MortimerTaskChoiceParser choiceParser;
 	private final MortimerEstimateService estimateService;
 
 	@Inject
 	public MortimerChoiceOverlay(
+		SlayerSpeedPlugin plugin,
 		SlayerSpeedConfig config,
 		MortimerTaskChoiceParser choiceParser,
 		MortimerEstimateService estimateService)
 	{
+        this.plugin = plugin;
 		this.config = config;
 		this.choiceParser = choiceParser;
 		this.estimateService = estimateService;
@@ -48,7 +52,7 @@ public class MortimerChoiceOverlay extends Overlay
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		if (!config.experimentalMortimerEstimates())
+		if (!plugin.isRunning() || !config.experimentalMortimerEstimates())
 		{
 			return null;
 		}
