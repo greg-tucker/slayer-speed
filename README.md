@@ -73,7 +73,7 @@ Java 11 compilation target, Gradle wrapper, and RuneLite dependencies.
 
 Jagex Account users should follow RuneLite's [development-client login instructions](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
 
-See [implementation progress](./IMPLEMENTATION_PROGRESS.md) for the resumable work log and [implementation plan](./UX_IMPLEMENTATION_PLAN.md) for acceptance criteria. The [standalone UI preview](./docs/UI_PREVIEW.md) uses the real sidebar and overlay with synthetic data, supports automatic rebuilds and requires no game login. Render its scenarios with `renderUi --offline` into build/ux-preview. Additional test fixtures are generated under build/ux-review; they are not gameplay screenshots. Real release captures and beta checks are tracked separately.
+The [standalone UI preview](./docs/UI_PREVIEW.md) uses the real sidebar and overlay with synthetic data, supports automatic rebuilds and requires no game login. Render its scenarios with `renderUi --offline` into build/ux-preview. Additional test fixtures are generated under build/ux-review; they are not gameplay screenshots.
 
 ## Licence
 
