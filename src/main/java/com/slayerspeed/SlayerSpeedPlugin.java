@@ -179,8 +179,6 @@ public class SlayerSpeedPlugin extends Plugin
         {
             lastCompletionResult = null;
         }));
-        panel.setDataActions(new com.slayerspeed.ui.HistoryFileActions(panel, clientThread,
-            historyRepository, config, this::refreshView, taskTracker::loadProfile));
         navigationButton = NavigationButton.builder()
 			.tooltip("Slayer Task Speed")
 			.icon(SlayerSpeedIcon.load())
@@ -612,7 +610,6 @@ public class SlayerSpeedPlugin extends Plugin
         String profile = loadedProfileKey;
         String storageMessage = historyRepository.getStorageMessage();
         String recoveryPayload = historyRepository.getRecoveryPayload();
-        boolean undoAvailable = historyRepository.canUndoDeletion();
         Collection<TaskStatistics> exactHistory = historyRepository.snapshotStatistics();
         if (cachedHistoryRevision != historyRepository.getHistoryRevision()
             || cachedSeparateLocations != config.separateByLocation())
@@ -650,7 +647,6 @@ public class SlayerSpeedPlugin extends Plugin
                 targetPanel.update(currentView, history, exactHistory);
                 targetPanel.updateCompletion(completion);
                 targetPanel.updateStorageStatus(storageMessage, recoveryPayload);
-                targetPanel.setUndoAvailable(undoAvailable);
                 targetPanel.updateProgress(context, initial, observedStart, remaining, recordedUnits);
                 targetPanel.updateActivity(currentView.isActive() ? currentView.getActivityLabel() : "");
             }

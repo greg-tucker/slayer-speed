@@ -1,29 +1,27 @@
-# Recovery and rollback
+# Saved-data protection and compatibility
 
 This release stores schema 5, matching the existing task timing format. Schemas 1–4 migrate with their original payload backed up.
 Experimental segmented timing is deferred to `codex/experimental-segmented-timing`.
-
-## Normal portable history
-1. Use Help & data → Export history to save a JSON file.
-2. Full backup additionally includes the active checkpoint.
-3. Import and replace previews the replacement before applying it. The currently active assignment is preserved.
-4. Merge only accepts histories whose retained records reconstruct their aggregates. Identical IDs are idempotent; conflicts fail.
-5. Recover checkpoint is separate and refuses to replace an active assignment.
+History import/export, merge, backup restore, checkpoint recovery and deletion Undo are deferred to `codex/history-transfer-recovery`.
 
 ## Unreadable data or failed writes
-Unreadable/future data is preserved and automatic saves are blocked. Export the original before using recovery.
-A failed write leaves tracking in memory and shows a status; checkpoint writes retry. Copy an unsaved completion result.
-Restore a known-good backup through the reviewed import. Do not erase the only copy of the unreadable payload.
+Unreadable or unsupported data is preserved, and automatic saves are blocked. Tracking continues in memory only.
+Use Help & data → View original data for recovery to inspect and copy the original contents before investigating the problem.
+This release has no file import or restore interface. Do not erase the only copy of unreadable history.
+
+A failed write shows a warning and retains the current task in memory. Saving retries at the next checkpoint.
+Copy an unsaved completion result if you need to preserve it before closing the client.
+Normal stored records can be inspected and copied through Help & data → View stored stats.
+Individual runs can be excluded from averages; deletion and reset actions cannot be undone.
 
 ## Returning from the timing development build
 Schema-6 history containing only ordinary timing is validated, backed up and saved as schema 5.
 Completed totals and the active checkpoint are retained. A history containing experimental timing
 is preserved unchanged and enters recovery mode; this release cannot safely reinterpret those samples.
-Export the original data and use the timing branch to access it, or restore a compatible pre-experiment backup.
-Keep a separate export before changing builds: the automatic recovery backup can be replaced by later data actions.
+Copy the original data and use the timing branch to access it. Keep a separate copy before changing builds.
+The automatic pre-migration backup remains in account-specific storage; restoring it requires manual recovery.
 
 ## Verified locally
-Automated tests exercise malformed/future preservation, stale profile rejection, import checkpoint protection, duplicate/conflicting
-merge IDs, pruned-total rejection, Undo, schema migration backups, ordinary development-history conversion,
-experimental-history preservation and failed-write retry.
-File chooser workflows and lifecycle recovery still need live-client verification.
+Automated tests exercise malformed, oversized and future-data preservation, account isolation,
+schema migration backups, ordinary development-history conversion, experimental-history preservation
+and failed-write retry. Manual recovery and live-client gameplay remain separate validation tasks.
