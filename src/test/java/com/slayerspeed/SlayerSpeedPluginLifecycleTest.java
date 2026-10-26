@@ -25,6 +25,8 @@ import net.runelite.client.plugins.PluginInstantiationException;
 import net.runelite.client.plugins.slayer.SlayerPluginService;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.ui.overlay.infobox.InfoBox;
+import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -45,6 +47,11 @@ public class SlayerSpeedPluginLifecycleTest
     private int tick;
     private boolean started;
     private final Queue<Runnable> clientTasks = new ConcurrentLinkedQueue<>();
+    private boolean overlayEnabled = true;
+    private boolean showInfoBoxes;
+    private boolean infoBoxKills;
+    private boolean infoBoxXp;
+    private final java.util.List<InfoBox> registeredInfoBoxes = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     @Before public void setUp() throws Exception
     {
@@ -87,7 +94,16 @@ public class SlayerSpeedPluginLifecycleTest
         SlayerSpeedConfig config = new SlayerSpeedConfig()
         {
             @Override public boolean experimentalSegmentedTiming() { return true; }
+            @Override public boolean overlayEnabled() { return overlayEnabled; }
+            @Override public boolean showInfoBoxes() { return showInfoBoxes; }
+            @Override public boolean infoBoxKillsPerHour() { return infoBoxKills; }
+            @Override public boolean infoBoxSlayerXpPerHour() { return infoBoxXp; }
         };
+        InfoBoxManager infoBoxManager = mock(InfoBoxManager.class);
+        doAnswer(call -> { registeredInfoBoxes.add(call.getArgument(0)); return null; })
+            .when(infoBoxManager).addInfoBox(any(InfoBox.class));
+        doAnswer(call -> { registeredInfoBoxes.remove(call.getArgument(0)); return null; })
+            .when(infoBoxManager).removeInfoBox(any(InfoBox.class));
         ClientThread clientThread = mock(ClientThread.class);
         doAnswer(call -> { clientTasks.add(call.getArgument(0)); return null; })
             .when(clientThread).invoke(any(Runnable.class));
@@ -105,6 +121,7 @@ public class SlayerSpeedPluginLifecycleTest
         set(plugin, "overlay", new SlayerSpeedOverlay(plugin, config));
         set(plugin, "mortimerChoiceOverlay", mock(MortimerChoiceOverlay.class));
         set(plugin, "overlayManager", overlays);
+        set(plugin, "infoBoxes", new SlayerSpeedInfoBoxes(infoBoxManager, plugin, config));
         set(plugin, "clientToolbar", mock(ClientToolbar.class));
         set(plugin, "clientThread", clientThread);
         SwingUtilities.invokeAndWait(plugin::startUp);
@@ -152,16 +169,19 @@ public class SlayerSpeedPluginLifecycleTest
 
     @Test public void restartRestoresCheckpointAndRegistersOneSetOfOverlays() throws Exception
     {
+        enableAllInfoBoxes();
         String taskId = tracker.getActiveTask().getId();
         SwingUtilities.invokeAndWait(plugin::shutDown);
         started = false;
         assertFalse(plugin.isOverlayVisible());
         assertFalse(plugin.getViewModel().isActive());
+        assertTrue(registeredInfoBoxes.isEmpty());
         SwingUtilities.invokeAndWait(plugin::startUp);
         started = true;
         gameTick();
         assertEquals(taskId, tracker.getActiveTask().getId());
         assertTrue(plugin.isOverlayVisible());
+        assertEquals(3, registeredInfoBoxes.size());
         verify(overlays, times(4)).add(any(net.runelite.client.ui.overlay.Overlay.class));
         verify(overlays, times(2)).remove(any(net.runelite.client.ui.overlay.Overlay.class));
     }
@@ -169,6 +189,7 @@ public class SlayerSpeedPluginLifecycleTest
     @Test public void disablingThroughRuneLiteRemovesBothOverlaysBeforeClientCleanup() throws Exception
     {
         PluginManager manager = managedPlugin();
+        enableAllInfoBoxes();
         when(configManager.getConfiguration("runelite", "slayerspeedplugin")).thenReturn("false");
         clearInvocations(overlays);
         SwingUtilities.invokeAndWait(() ->
@@ -182,6 +203,7 @@ public class SlayerSpeedPluginLifecycleTest
         assertFalse(plugin.isRunning());
         assertFalse(plugin.isOverlayVisible());
         assertFalse(plugin.getViewModel().isActive());
+        assertTrue(registeredInfoBoxes.isEmpty());
         verify(overlays).remove((SlayerSpeedOverlay) get(plugin, "overlay"));
         verify(overlays).remove((MortimerChoiceOverlay) get(plugin, "mortimerChoiceOverlay"));
         assertFalse("Client cleanup is deferred, never read inventory on the EDT", clientTasks.isEmpty());
@@ -192,6 +214,7 @@ public class SlayerSpeedPluginLifecycleTest
     @Test public void switchingRuneLiteConfigurationProfilesStopsThePlugin() throws Exception
     {
         PluginManager manager = managedPlugin();
+        enableAllInfoBoxes();
         // A RuneLite configuration profile switch is different from an OSRS account switch.
         when(configManager.getConfiguration("runelite", "slayerspeedplugin")).thenReturn("false");
         manager.onProfileChanged(mock(ProfileChanged.class));
@@ -201,16 +224,19 @@ public class SlayerSpeedPluginLifecycleTest
         assertFalse(manager.isPluginEnabled(plugin));
         assertFalse(plugin.isOverlayVisible());
         assertNull(get(plugin, "panel"));
+        assertTrue(registeredInfoBoxes.isEmpty());
         flushUi();
     }
 
     @Test public void finalInventoryReadFailureCannotLeaveTheUiOrTrackingRunning() throws Exception
     {
+        enableAllInfoBoxes();
         when(client.getItemContainer(anyInt())).thenThrow(new IllegalStateException("Inventory unavailable"));
         clearInvocations(overlays);
         SwingUtilities.invokeAndWait(plugin::shutDown);
         started = false;
         assertFalse(plugin.isOverlayVisible());
+        assertTrue(registeredInfoBoxes.isEmpty());
         verify(overlays, times(2)).remove(any(net.runelite.client.ui.overlay.Overlay.class));
         flushUi();
         assertTrue(tracker.getActiveTask().isSuspended());
@@ -311,6 +337,70 @@ public class SlayerSpeedPluginLifecycleTest
         flushUi();
         assertTrue(tracker.getActiveTask().isManualPaused());
         verify(repository, times(1)).snapshotStatistics();
+    }
+
+    @Test public void infoBoxesFollowLiveSettingsAndDoNotDuplicateAcrossTicks() throws Exception
+    {
+        assertTrue(registeredInfoBoxes.isEmpty());
+        overlayEnabled = false;
+        showInfoBoxes = true;
+        changeDisplayConfig();
+        assertEquals(1, registeredInfoBoxes.size());
+        assertTrue(registeredInfoBoxes.get(0).render());
+        enableAllInfoBoxes();
+        gameTick();
+        gameTick();
+        assertEquals(3, registeredInfoBoxes.size());
+        assertEquals(3, registeredInfoBoxes.stream().map(InfoBox::getName).distinct().count());
+        overlayEnabled = false;
+        showInfoBoxes = false;
+        changeDisplayConfig();
+        assertTrue(registeredInfoBoxes.isEmpty());
+        assertTrue(plugin.getViewModel().isActive());
+    }
+
+    @Test public void infoBoxesShareIdleLogoutAndCompletionVisibility() throws Exception
+    {
+        enableAllInfoBoxes();
+        InfoBox time = registeredInfoBoxes.get(0);
+        makeTaskIdle();
+        gameTick();
+        assertFalse(time.render());
+        when(slayer.getRemainingAmount()).thenReturn(99);
+        gameTick();
+        assertTrue(time.render());
+        changeGameState(GameState.LOGIN_SCREEN);
+        assertFalse(time.render());
+        changeGameState(GameState.LOGGED_IN);
+        gameTick();
+        assertFalse(time.render());
+        when(slayer.getRemainingAmount()).thenReturn(98);
+        gameTick();
+        assertTrue(time.render());
+        ChatMessage completion = new ChatMessage();
+        completion.setType(ChatMessageType.GAMEMESSAGE);
+        completion.setMessage("You have completed your task!");
+        plugin.onChatMessage(completion);
+        assertFalse(time.render());
+    }
+
+    private void enableAllInfoBoxes() throws Exception
+    {
+        overlayEnabled = true;
+        showInfoBoxes = true;
+        infoBoxKills = true;
+        infoBoxXp = true;
+        changeDisplayConfig();
+        assertEquals(3, registeredInfoBoxes.size());
+    }
+
+    private void changeDisplayConfig() throws Exception
+    {
+        net.runelite.client.events.ConfigChanged event = new net.runelite.client.events.ConfigChanged();
+        event.setGroup(SlayerSpeedConfig.GROUP);
+        event.setKey("showInfoBoxes");
+        plugin.onConfigChanged(event);
+        flushUi();
     }
 
     private void makeTaskIdle() throws Exception

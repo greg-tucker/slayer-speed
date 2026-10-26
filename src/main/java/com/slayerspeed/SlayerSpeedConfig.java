@@ -19,10 +19,18 @@ public interface SlayerSpeedConfig extends Config
 	)
 	String DISPLAY_SECTION = "display";
 
+    @ConfigSection(name = "Overlay", description = "Enable and configure the task overlay",
+        position = 1, closedByDefault = false)
+    String OVERLAY_SECTION = "overlay";
+
+    @ConfigSection(name = "Infoboxes", description = "Enable infoboxes and choose the information to display",
+        position = 2, closedByDefault = false)
+    String INFOBOXES_SECTION = "infoboxes";
+
 	@ConfigSection(
 		name = "Estimates",
 		description = "Configure task time and pace estimates",
-		position = 1,
+		position = 3,
 		closedByDefault = false
 	)
 	String ESTIMATES_SECTION = "estimates";
@@ -30,7 +38,7 @@ public interface SlayerSpeedConfig extends Config
 	@ConfigSection(
 		name = "Cannon",
 		description = "Configure cannonball tracking and estimates",
-		position = 2,
+		position = 4,
 		closedByDefault = false
 	)
 	String CANNON_SECTION = "cannon";
@@ -38,7 +46,7 @@ public interface SlayerSpeedConfig extends Config
 	@ConfigSection(
 		name = "History",
 		description = "Configure saved task history",
-		position = 3,
+		position = 5,
 		closedByDefault = false
 	)
 	String HISTORY_SECTION = "history";
@@ -46,7 +54,7 @@ public interface SlayerSpeedConfig extends Config
 	@ConfigSection(
 		name = "Advanced",
 		description = "Advanced tracking and sampling controls",
-		position = 4,
+		position = 6,
 		closedByDefault = true
 	)
 	String ADVANCED_SECTION = "advanced";
@@ -54,6 +62,7 @@ public interface SlayerSpeedConfig extends Config
 	@ConfigItem(
 		keyName = "showOverlay",
 		name = "Show overlay",
+		hidden = true,
 		description = "Show current SlayerSpeed rates and ETA in an in-game overlay",
 		position = 0,
 		section = DISPLAY_SECTION
@@ -63,9 +72,39 @@ public interface SlayerSpeedConfig extends Config
 		return true;
 	}
 
+    @ConfigItem(keyName = "inGameDisplay", name = "In-game display",
+        hidden = true,
+        description = "Show the task overlay, compact infoboxes, both, or neither. The sidebar remains available.",
+        position = 0, section = DISPLAY_SECTION)
+    default SlayerSpeedInGameDisplay inGameDisplay()
+    {
+        // Preserve existing showOverlay=false profiles until a display is explicitly chosen.
+        return showOverlay() ? SlayerSpeedInGameDisplay.OVERLAY : SlayerSpeedInGameDisplay.OFF;
+    }
+
+    @ConfigItem(keyName = "overlayEnabled", name = "Show overlay",
+        description = "Show the task overlay independently of infoboxes", position = 0, section = OVERLAY_SECTION)
+    default boolean overlayEnabled() { return inGameDisplay().showsOverlay(); }
+
+    @ConfigItem(keyName = "showInfoBoxes", name = "Show infoboxes",
+        description = "Show the selected infoboxes independently of the overlay", position = 0, section = INFOBOXES_SECTION)
+    default boolean showInfoBoxes() { return inGameDisplay().showsInfoBoxes(); }
+
+    @ConfigItem(keyName = "infoBoxTimeLeft", name = "Time remaining infobox",
+        description = "Show estimated task time remaining when infoboxes are enabled", position = 1, section = INFOBOXES_SECTION)
+    default boolean infoBoxTimeLeft() { return true; }
+
+    @ConfigItem(keyName = "infoBoxKillsPerHour", name = "Kills/hr infobox",
+        description = "Show this task's physical kills per hour, rather than Slayer counter units", position = 2, section = INFOBOXES_SECTION)
+    default boolean infoBoxKillsPerHour() { return false; }
+
+    @ConfigItem(keyName = "infoBoxSlayerXpPerHour", name = "Slayer XP/hr infobox",
+        description = "Show this task's Slayer XP per hour", position = 3, section = INFOBOXES_SECTION)
+    default boolean infoBoxSlayerXpPerHour() { return false; }
+
 	@ConfigItem(
 		keyName = "displayMode",
-		name = "Detail level",
+		name = "Sidebar detail",
 		description = "Simple shows essential information; Detailed shows every tracked metric",
 		position = 1,
 		section = DISPLAY_SECTION
@@ -77,12 +116,12 @@ public interface SlayerSpeedConfig extends Config
 
     @ConfigItem(keyName = "overlayDetail", name = "Overlay detail",
         description = "Choose a compact or detailed overlay independently, or follow the sidebar setting",
-        position = 2, section = DISPLAY_SECTION)
+        position = 1, section = OVERLAY_SECTION)
     default SlayerSpeedOverlayMode overlayDetail() { return SlayerSpeedOverlayMode.FOLLOW_SIDEBAR; }
 
     @Range(min = 0, max = 30)
-    @ConfigItem(keyName = "overlayIdleMinutes", name = "Hide overlay after inactivity",
-        description = "Hide after this many minutes without Slayer activity or sidebar interaction. Opens again on activity. 0 keeps it visible while assigned.",
+    @ConfigItem(keyName = "overlayIdleMinutes", name = "Hide in-game info after inactivity",
+        description = "Hide overlay and infoboxes after this many minutes without Slayer activity or sidebar interaction. 0 keeps them visible while assigned.",
         position = 4, section = DISPLAY_SECTION)
     default int overlayIdleMinutes() { return 2; }
 

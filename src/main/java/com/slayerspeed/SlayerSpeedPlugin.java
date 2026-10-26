@@ -117,6 +117,9 @@ public class SlayerSpeedPlugin extends Plugin
 	@Inject
 	private MortimerChoiceOverlay mortimerChoiceOverlay;
 
+    @Inject
+    private com.slayerspeed.ui.SlayerSpeedInfoBoxes infoBoxes;
+
 	@Inject
 	private OverlayManager overlayManager;
 
@@ -214,6 +217,7 @@ public class SlayerSpeedPlugin extends Plugin
         running = false;
         overlayTaskAvailable = false;
         pendingUi = null;
+        infoBoxes.clear();
 		overlayManager.remove(overlay);
 		overlayManager.remove(mortimerChoiceOverlay);
 		if (navigationButton != null)
@@ -606,6 +610,7 @@ public class SlayerSpeedPlugin extends Plugin
             Math.max(overlayTask.getStartedAtMillis(), overlayTask.getLastActivityAtMillis()));
         overlayTaskAvailable = client.getGameState() == GameState.LOGGED_IN
             && overlayTask != null && overlayTask.getLastRemainingAmount() > 0;
+        infoBoxes.update();
         if (panel == null) { return; }
         SlayerSpeedPanel targetPanel = panel;
         SlayerSpeedViewModel currentView = viewModel;

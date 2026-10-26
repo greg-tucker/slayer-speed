@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add separate Overlay and Infoboxes settings sections with independent enable switches, preserving existing display preferences. Independently toggle compact time-remaining, physical kills/hr and Slayer XP/hr infoboxes with shared auto-hide, task tooltips and separate positioning identities.
+
 - Fix overlays remaining after disabling the plugin or switching RuneLite configuration profiles: run inventory initialization/cleanup on the client thread and remove the UI immediately on shutdown. Guard queued initialization against rapid disable/re-enable and stop rendering both overlays while disabled (issue #1).
 
 - Cover plugin logout, account switching, restart and overlay visibility through lifecycle tests; require real dialog coverage under a virtual display in CI.

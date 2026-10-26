@@ -26,7 +26,7 @@ public class SlayerSpeedOverlay extends OverlayPanel
 	public Dimension render(Graphics2D graphics)
 	{
 		SlayerSpeedViewModel model = plugin.getViewModel();
-		if (!config.showOverlay() || !model.isActive() || !plugin.isOverlayVisible())
+		if (!config.overlayEnabled() || !model.isActive() || !plugin.isOverlayVisible())
 		{
 			return null;
 		}
