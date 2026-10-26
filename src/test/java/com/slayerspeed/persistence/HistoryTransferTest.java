@@ -28,6 +28,47 @@ public class HistoryTransferTest
         repo.applyImport(repo.previewImport(export, TaskHistoryRepository.ImportMode.REPLACE, 50));
         assertSame(active, repo.getCheckpoint());
         assertEquals(100, repo.find(new TaskKey("Gargoyles", null), true).getTotalTaskProgressUnits());
+        repo.loadProfile();
+        assertEquals(TaskHistoryRepository.LoadState.LOADED, repo.getLoadState());
+        assertEquals(active.getId(), repo.getCheckpoint().getId());
+        assertEquals(100, repo.find(new TaskKey("Gargoyles", null), true).getTotalTaskProgressUnits());
+    }
+
+    @Test public void importConflictingWithCurrentCheckpointCannotChangeHistoryOrBackup()
+    {
+        for (TaskHistoryRepository.ImportMode mode : new TaskHistoryRepository.ImportMode[] {
+            TaskHistoryRepository.ImportMode.REPLACE, TaskHistoryRepository.ImportMode.MERGE
+        })
+        {
+            HistoryRecoveryTest.MemoryStorage storage = new HistoryRecoveryTest.MemoryStorage();
+            TaskHistoryRepository repo = TaskHistoryRepository.forStorage(storage, gson);
+            repo.loadProfile();
+            repo.saveRun(run("existing", 100), true, 50);
+            storage.write("historyBackup", "previous backup");
+
+            ActiveTask active = new ActiveTask("Gargoyles", null, 100, 80, 100000);
+            TaskStatistics importedStats = new TaskStatistics("Gargoyles", null);
+            importedStats.addRun(run(active.getId(), 100), 50);
+            SlayerSpeedData imported = new SlayerSpeedData();
+            imported.getStatisticsByTaskKey().put(new TaskKey("Gargoyles", null).asStorageKey(), importedStats);
+            TaskHistoryRepository.ImportPreview preview = repo.previewImport(gson.toJson(imported), mode, 50);
+
+            // A checkpoint can change after preview without changing the history revision.
+            repo.saveCheckpoint(active);
+            String before = storage.read(TaskHistoryRepository.DATA_KEY);
+            long revision = repo.getHistoryRevision();
+            assertThrows(IllegalArgumentException.class, () -> repo.applyImport(preview));
+            assertEquals(before, storage.read(TaskHistoryRepository.DATA_KEY));
+            assertEquals("previous backup", storage.read("historyBackup"));
+            assertEquals(revision, repo.getHistoryRevision());
+            assertSame(active, repo.getCheckpoint());
+            assertEquals(100, repo.find(new TaskKey("Gargoyles", null), true).getTotalTaskProgressUnits());
+
+            repo.loadProfile();
+            assertEquals(TaskHistoryRepository.LoadState.LOADED, repo.getLoadState());
+            assertEquals(active.getId(), repo.getCheckpoint().getId());
+            assertEquals(100, repo.find(new TaskKey("Gargoyles", null), true).getTotalTaskProgressUnits());
+        }
     }
 
     @Test public void mergeIsIdempotentAndRejectsConflictingOrPrunedTotals()

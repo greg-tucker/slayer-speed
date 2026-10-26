@@ -105,8 +105,11 @@ public class TaskHistoryRepository implements TaskHistoryStore
         {
             replacement.setCheckpointedActiveTask(data.getCheckpointedActiveTask());
         }
-        backupCurrent();
         String serialized = encode(replacement);
+        // The current checkpoint may have changed since preview. Validate it with
+        // the imported runs before modifying either history or its recovery backup.
+        HistoryValidator.decode(serialized, gson);
+        backupCurrent();
         storage.write(DATA_KEY, serialized); // Commit succeeds before replacing live repository state.
         data = replacement;
         lastSaveFailed = false;
