@@ -108,6 +108,7 @@ public final class SlayerSpeedPreview
             this::delete,
             id -> { selectedEncounter = id; refresh(); }, config);
         sidebar.setDisplayModeAction(mode -> { config.mode = mode; refresh(); });
+        sidebar.setPauseAction(() -> { scene = scene == Scene.WAITING ? Scene.ACTIVE : Scene.WAITING; refresh(); });
         sidebar.setDismissCompletionAction(() -> { completionDismissed = true; refresh(); });
         sidebar.setDataActions(action ->
         {
@@ -162,7 +163,7 @@ public final class SlayerSpeedPreview
         int remaining = first ? 172 : 102;
         TaskEstimate estimate = new TaskEstimateService().calculate(remaining, units, millis,
             stats == null ? 0 : stats.getTotalTaskProgressUnits(), stats == null ? 0 : stats.getTotalActiveMillis(),
-            10, matches, stats == null ? 0 : stats.getCompletedTaskCount(), "Lifetime history");
+            10, matches, stats == null ? 0 : stats.getCompletedTaskCount(), "Legacy lifetime history");
         return new SlayerSpeedViewModel(true, taskName(), Integer.toString(remaining), units + " kills · " + units + " task units",
             KphCalculator.formatRate(KphCalculator.ratePerHour(units, millis)),
             KphCalculator.formatRate(KphCalculator.ratePerHour(units, millis)), false,
@@ -191,11 +192,11 @@ public final class SlayerSpeedPreview
         modes.setSelectedItem(config.mode);
         sidebar.updateHistoryContext(model.isActive() ? taskName() : "");
         sidebar.update(model, new ArrayList<>(history));
-        sidebar.updateActivity(!model.isActive() ? "" : scene == Scene.WAITING
-            ? "Waiting for task activity" : "Tracking — capped activity gaps");
         sidebar.updateProgress("preview:" + scene, model.isActive() ? 174 : 0, 174,
             model.isActive() ? (scene == Scene.FIRST_TASK ? 172 : 102) : 0,
             model.isActive() ? (scene == Scene.FIRST_TASK ? 2 : 68) : -1);
+        sidebar.updateTiming(!model.isActive() ? "" : scene == Scene.WAITING ? "Suspended — waiting for task activity"
+            : "Tracking — capped activity gaps", false, false);
         sidebar.setUndoAvailable(undo != null && System.currentTimeMillis() < undoUntil);
         sidebar.updateCompletion(completion());
         sidebarHost.setPreferredSize(new Dimension((Integer) width.getValue() + 18, 700));

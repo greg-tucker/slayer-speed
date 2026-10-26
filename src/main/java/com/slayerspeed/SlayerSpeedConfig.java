@@ -304,4 +304,8 @@ public interface SlayerSpeedConfig extends Config
         return com.slayerspeed.calculation.EstimateWindow.LIFETIME;
     }
 
+    @ConfigItem(keyName = "experimentalSegmentedTiming", name = "Experimental segmented timing",
+        description = "New tasks use matched timing intervals and manual pause. Kept separate from legacy history; requires live validation.",
+        position = 2, section = ADVANCED_SECTION)
+    default boolean experimentalSegmentedTiming() { return false; }
 }

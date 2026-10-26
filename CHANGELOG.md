@@ -30,8 +30,8 @@
 - Add a read-only personal-history comparison view.
 - Cache detached history snapshots and coalesce sidebar updates.
 - Add portable history export/import, guarded merge, backups, checkpoint recovery and deletion Undo.
-- Add recent 5/10/25 estimate windows while preserving lifetime defaults.
-- Defer experimental segmented timing and Pause/Resume to the `codex/experimental-segmented-timing` branch. Keep schema 5 for this release; back up and convert ordinary development history, preserving experimental history for recovery.
+- Add opt-in segmented timing with Pause/Resume, schema-6 migration backups and separate legacy cohorts.
+- Add recent 5/10/25 estimate windows; preserve lifetime defaults and label legacy fallback.
 - Share history selection across the sidebar, preview and experimental Mortimer ranges.
 - Retain completion results with copy/review/dismiss; add searchable and sortable history.
 - Reject invalid numeric imports and report failed saves while retaining in-memory tracking for retry.

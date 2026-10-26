@@ -111,7 +111,8 @@ public class MortimerChoiceOverlay extends Overlay
             drawEstimate(graphics, profile, panelX, panelWidth, textY);
             textY += 13;
             String source = profile.getSourceDescription().replace(" history", "")
-                .replace(" recent ", " ").replace(" eligible runs", " runs");
+                .replace(" recent ", " ").replace(" eligible runs", " runs")
+                .replace("lifetime (fallback)", "fallback");
             drawCentered(graphics, source, panelX, panelWidth, textY, MUTED);
             textY += 15;
         }

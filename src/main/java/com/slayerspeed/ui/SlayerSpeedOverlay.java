@@ -85,7 +85,8 @@ public class SlayerSpeedOverlay extends OverlayPanel
 				panelComponent.getChildren().add(line(model.getCannonRateLabel(), model.getCannonballsPerKill()));
 			}
 		}
-        if (model.getActivityState() == SlayerSpeedViewModel.ActivityState.SUSPENDED)
+        if (model.getActivityState() == SlayerSpeedViewModel.ActivityState.SUSPENDED
+            || model.getActivityState() == SlayerSpeedViewModel.ActivityState.PAUSED)
         {
             panelComponent.getChildren().add(textLine(model.getActivityLabel()));
         }

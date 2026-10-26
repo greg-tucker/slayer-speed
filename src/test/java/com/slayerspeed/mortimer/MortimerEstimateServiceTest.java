@@ -80,9 +80,12 @@ public class MortimerEstimateServiceTest
         MortimerEstimateService service = new MortimerEstimateService(repository, new EncounterProfileResolver());
         MortimerTaskEstimate estimate = service.estimate(
             new MortimerTaskOffer("Bloodvelds", 100, 150, new Rectangle()),
-            com.slayerspeed.calculation.EstimateWindow.RECENT_5);
+            com.slayerspeed.calculation.EstimateWindow.RECENT_5, 0);
         assertEquals("1h-1h 30m", estimate.getProfiles().get(0).getDurationRange());
-        assertEquals("Recent 5/5 eligible runs", estimate.getProfiles().get(0).getSourceDescription());
+        assertEquals("Legacy recent 5/5 eligible runs", estimate.getProfiles().get(0).getSourceDescription());
+        assertEquals("Legacy lifetime history (fallback)",
+            service.estimate(new MortimerTaskOffer("Bloodvelds", 100, 150, new Rectangle()),
+                com.slayerspeed.calculation.EstimateWindow.RECENT_5, 1).getProfiles().get(0).getSourceDescription());
     }
 
     private static TaskRun run(

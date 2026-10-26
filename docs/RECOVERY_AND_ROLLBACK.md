@@ -1,7 +1,7 @@
 # Recovery and rollback
 
-This release stores schema 5, matching the existing task timing format. Schemas 1–4 migrate with their original payload backed up.
-Experimental segmented timing is deferred to `codex/experimental-segmented-timing`.
+This unreleased branch stores schema 6. Schemas 1–5 migrate with their original payload backed up.
+The retained legacy totals and old checkpoint timing remain legacy; they are not reconstructed as segmented data.
 
 ## Normal portable history
 1. Use Help & data → Export history to save a JSON file.
@@ -15,15 +15,16 @@ Unreadable/future data is preserved and automatic saves are blocked. Export the 
 A failed write leaves tracking in memory and shows a status; checkpoint writes retry. Copy an unsaved completion result.
 Restore a known-good backup through the reviewed import. Do not erase the only copy of the unreadable payload.
 
-## Returning from the timing development build
-Schema-6 history containing only ordinary timing is validated, backed up and saved as schema 5.
-Completed totals and the active checkpoint are retained. A history containing experimental timing
-is preserved unchanged and enters recovery mode; this release cannot safely reinterpret those samples.
-Export the original data and use the timing branch to access it, or restore a compatible pre-experiment backup.
-Keep a separate export before changing builds: the automatic recovery backup can be replaced by later data actions.
+## Downgrade
+Downgrade is not an in-place schema conversion. Old plugin builds do not understand schema 6.
+Export a full schema-6 backup first and keep it outside RuneLite. Also preserve the original pre-migration backup.
+Disabling experimental timing is safe on this build: the current task finishes under its stored policy, future tasks use legacy.
+For an actual old-build downgrade, stop recording and restore the compatible pre-migration payload to the correct account profile
+while RuneLite is closed, using an explicit manual recovery procedure. Keep both originals. Do not launch an old build against
+the only copy of schema 6. The new import path migrates old data forward; it does not prepare an old-build configuration.
+A real old-client downgrade rehearsal remains a release gate; no such rehearsal has been performed.
 
 ## Verified locally
 Automated tests exercise malformed/future preservation, stale profile rejection, import checkpoint protection, duplicate/conflicting
-merge IDs, pruned-total rejection, Undo, schema migration backups, ordinary development-history conversion,
-experimental-history preservation and failed-write retry.
+merge IDs, pruned-total rejection, Undo, schema migration backups, separated timing buckets and failed-write retry.
 File chooser workflows and lifecycle recovery still need live-client verification.

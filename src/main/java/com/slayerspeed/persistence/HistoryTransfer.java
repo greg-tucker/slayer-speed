@@ -62,7 +62,7 @@ final class HistoryTransfer
             for (TaskStatistics stats : data.getStatisticsByTaskKey().values())
             {
                 TaskStatistics reconstructed = new TaskStatistics(stats.getTaskName(), stats.getTaskLocation(),
-                    stats.getEncounterProfileId(), stats.getEncounterProfileName());
+                    stats.getEncounterProfileId(), stats.getEncounterProfileName(), stats.getTimingPolicy());
                 for (TaskRun run : stats.getRecentRuns()) { reconstructed.addRun(run, Integer.MAX_VALUE); }
                 if (!sameTotals(stats, reconstructed))
                 {
@@ -86,7 +86,7 @@ final class HistoryTransfer
             String key = run.taskKey(true).asStorageKey();
             TaskStatistics stats = merged.getStatisticsByTaskKey().computeIfAbsent(key, ignored ->
                 new TaskStatistics(run.getTaskName(), run.getTaskLocation(),
-                    run.getEncounterProfileId(), run.getEncounterProfileName()));
+                    run.getEncounterProfileId(), run.getEncounterProfileName(), run.getTimingPolicy()));
             stats.addRun(run, limit);
         }
         return merged;

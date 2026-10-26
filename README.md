@@ -34,7 +34,9 @@ ETA follows the Slayer counter's progress, not physical kills. Bracelets can mak
 
 Cannonball estimates describe ammunition expected to be fired. An **If using a cannon** estimate is a historical scenario, not an inventory stock count. Superior Slayer XP is included in XP rates.
 
-**Estimate history** offers Lifetime (the default), Recent 5, Recent 10 and Recent 25. Recent windows use only eligible retained runs after encounter and location selection. The source shows how many are available; **Show estimate samples** in Compare lists the contributing records. Changing this setting does not change saved totals.
+**Estimate history** offers Lifetime (the default), Recent 5, Recent 10 and Recent 25. Recent windows use only eligible retained runs after encounter, location and timing selection. The source shows how many are available; **Show estimate samples** in Compare lists the contributing records. Changing this setting does not change saved totals.
+
+**Experimental segmented timing** is off by default and applies to new assignments. It adds Pause/Resume and keeps matched timed samples separate from legacy history. Task activity resumes a pause automatically. When matching new-policy history is unavailable, a labelled **Legacy lifetime history (fallback)** estimate can appear; the two timing methods are never blended. See [the timing contract](./docs/TIMING_POLICY.md) for details.
 
 The last completion result stays available during your next task. Copy, dismiss or review it locally. History puts the current assignment first by default. Simple cards keep historical Slayer XP/hr and average duration visible; expand a card for other rates and timing details. Search by assignment, encounter or location, or show only the current task.
 
@@ -46,7 +48,7 @@ History is stored in RuneLite's account-specific profile data. This plugin has n
 
 **Help & data** offers JSON export, full backups, reviewed imports, backup restore and Undo for a deleted run. Normal import preserves the active assignment; checkpoint recovery is a separate action. Merge is available only when retained records can reconstruct all totals, so old pruned history cannot be accidentally counted twice. Undo lasts 30 seconds and ends when history changes.
 
-Saved history uses schema 5. Schema upgrades keep a pre-migration backup. Ordinary schema-6 history from the development build can return to schema 5 with a backup; experimental timing history is preserved for recovery. See [recovery and rollback](./docs/RECOVERY_AND_ROLLBACK.md).
+Schema upgrades keep a pre-migration backup. Export important history before changing versions; older builds cannot read schema 6. See [recovery and rollback](./docs/RECOVERY_AND_ROLLBACK.md).
 
 **Help & data** also contains stored records and recovery controls. If history cannot be read, the original payload is preserved and the sidebar explains that new tracking is in memory only. Copy the original data before attempting recovery; changing accounts does not transfer that history.
 

@@ -115,7 +115,10 @@ public class SlayerSpeedPanel extends PluginPanel
 	private boolean updatingEncounterSelector;
 
 	private final JLabel timingStatus = new JLabel();
-    public void updateActivity(String status)
+    private final JButton pauseButton = new JButton("Pause");
+    private Runnable pauseAction = () -> {};
+    public void setPauseAction(Runnable action) { pauseAction = action; }
+    public void updateTiming(String status, boolean enabled, boolean paused)
     {
         timingStatus.setToolTipText(status);
         String label = shownModel.getActivityState() == SlayerSpeedViewModel.ActivityState.UNSPECIFIED
@@ -127,6 +130,8 @@ public class SlayerSpeedPanel extends PluginPanel
             ? new Color(125, 185, 110) : Color.LIGHT_GRAY);
         timingStatus.setText("<html><div style='width:145px;text-align:center'>" + label + "</div></html>");
         timingStatus.setVisible(!status.isEmpty());
+        pauseButton.setVisible(enabled);
+        pauseButton.setText(paused ? "Resume" : "Pause");
     }
 
     private final JProgressBar progress = new JProgressBar();
@@ -352,20 +357,24 @@ public class SlayerSpeedPanel extends PluginPanel
         taskOptions.add(progressTitle);
         progress.setForeground(new Color(218, 166, 55));
         add(progress);
-        timingStatus.setAlignmentX(CENTER_ALIGNMENT);
-        timingStatus.setForeground(Color.LIGHT_GRAY);
-        add(timingStatus);
         recordedProgress.setAlignmentX(CENTER_ALIGNMENT);
         recordedProgress.setForeground(Color.GRAY);
         recordedProgress.setName("recordedProgress");
         recordedProgress.setVisible(false);
         taskOptions.add(recordedProgress);
+        timingStatus.setAlignmentX(CENTER_ALIGNMENT);
+        timingStatus.setForeground(Color.LIGHT_GRAY);
+        add(timingStatus);
         activityExplanation.setAlignmentX(CENTER_ALIGNMENT);
         activityExplanation.setForeground(Color.GRAY);
         activityExplanation.setName("activityExplanation");
         activityExplanation.setVisible(false);
         add(activityExplanation);
         taskOptions.add(confidenceLabel);
+        pauseButton.setAlignmentX(CENTER_ALIGNMENT);
+        pauseButton.setVisible(false);
+        pauseButton.addActionListener(event -> pauseAction.run());
+        add(pauseButton);
         taskOptionsToggle.setName("taskOptionsToggle");
         taskOptionsToggle.setAlignmentX(CENTER_ALIGNMENT);
         taskOptionsToggle.setToolTipText("Estimate source, recorded progress, encounter selection and comparison");
@@ -790,6 +799,11 @@ public class SlayerSpeedPanel extends PluginPanel
 		titles.add(name);
         name.setToolTipText(taskName);
         JPanel metadata = fullWidthBoxPanel(ColorScheme.DARKER_GRAY_COLOR);
+        JLabel timing = new JLabel(statistics.getTimingPolicy() == 0 ? "Legacy timing" : "Segmented timing");
+        timing.setForeground(Color.GRAY);
+        timing.setAlignmentX(LEFT_ALIGNMENT);
+        extraMetrics.add(timing);
+        card.setToolTipText(timing.getText());
 		if (shouldShowProfileName(
 			statistics.getTaskName(), statistics.getEncounterProfileId(), profileName))
 		{
@@ -1012,8 +1026,8 @@ public class SlayerSpeedPanel extends PluginPanel
 			: "";
 		String date = RUN_DATE_FORMAT.format(
 			Instant.ofEpochMilli(run.getCompletedAtMillis()).atZone(ZoneId.systemDefault()));
-		OptionalDouble runKph = KphCalculator.literalKph(run.getActualKills(), run.getActiveMillis());
-		OptionalDouble runXp = KphCalculator.slayerXpPerHour(run.getTotalSlayerXp(), run.getActiveMillis());
+		OptionalDouble runKph = KphCalculator.literalKph(run.getRateActualKills(), run.getActiveMillis());
+		OptionalDouble runXp = KphCalculator.slayerXpPerHour(run.getRateSlayerXp(), run.getActiveMillis());
 		JLabel details = new JLabel(String.format(
 			"<html><b>%s%s</b><br>%s \u00B7 %d kills \u00B7 %d units"
 				+ "<br>KPH %s \u00B7 XP/hr %s<br>%s%s%s</html>",
@@ -1080,7 +1094,7 @@ public class SlayerSpeedPanel extends PluginPanel
 	{
 		return nullToEmpty(statistics.getTaskName()) + '\u001F'
 			+ nullToEmpty(statistics.getTaskLocation()) + '\u001F'
-			+ nullToEmpty(statistics.getEncounterProfileId());
+			+ nullToEmpty(statistics.getEncounterProfileId()) + ':' + statistics.getTimingPolicy();
 	}
 
 	private static String nullToEmpty(String value)

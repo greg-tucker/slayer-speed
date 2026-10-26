@@ -6,8 +6,13 @@ public class ActiveTimeTracker
 {
 	public void recordActivity(ActiveTask task, long nowMillis, int idleTimeoutMinutes)
 	{
-		task.markActivity();
-		long previous = task.getLastActivityAtMillis();
+        if (task.getTimingPolicy() != 0)
+        {
+            task.recordSegmentActivity(nowMillis, idleTimeoutMinutes);
+            return;
+        }
+        task.markLegacyActivity();
+        long previous = task.getLastActivityAtMillis();
 		if (previous <= 0)
 		{
 			if (task.getSetupMillis() == 0)

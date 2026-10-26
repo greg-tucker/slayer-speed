@@ -187,10 +187,12 @@ public class TaskTrackerTest
     {
         FakeStore store = new FakeStore();
         TaskTracker tracker = new TaskTracker(store, new ActiveTimeTracker());
+        tracker.setSegmentedTiming(true);
         tracker.observe(TaskSnapshot.active("Gargoyles", null, 100, 100), 1000, 5, true, 50);
         tracker.observe(TaskSnapshot.active("Gargoyles", null, 100, 80), 61000, 5, true, 50);
         TaskUpdate update = tracker.observe(TaskSnapshot.active("Gargoyles", null, 100, 100), 62000, 5, true, 50);
         assertEquals(TaskRunStatus.REPLACED, update.getEndedRun().getStatus());
+        assertEquals(1, tracker.getActiveTask().getTimingPolicy());
         assertEquals(0, tracker.getActiveTask().getTaskProgressUnits());
     }
 

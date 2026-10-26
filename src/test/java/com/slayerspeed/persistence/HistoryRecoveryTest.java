@@ -46,7 +46,7 @@ public class HistoryRecoveryTest
         repo.loadProfile();
         assertEquals(TaskHistoryRepository.LoadState.RECOVERY_REQUIRED, repo.getLoadState());
         TaskHistoryRepository.ImportPreview preview = repo.previewImport(
-            "{\"schemaVersion\":5,\"statisticsByTaskKey\":{}}", TaskHistoryRepository.ImportMode.REPLACE, 50);
+            "{\"schemaVersion\":6,\"statisticsByTaskKey\":{}}", TaskHistoryRepository.ImportMode.REPLACE, 50);
         repo.applyImport(preview);
         assertEquals(original, storage.read("historyUnreadableBackup"));
         assertTrue(repo.isPersistenceAvailable());

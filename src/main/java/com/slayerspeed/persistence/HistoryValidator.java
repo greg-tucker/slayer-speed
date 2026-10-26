@@ -48,7 +48,7 @@ final class HistoryValidator
         }
         validateNumbers(parsed);
         int version = object.get("schemaVersion").getAsInt();
-        if (version < 1 || version > 6
+        if (version < 1 || version > SlayerSpeedData.CURRENT_SCHEMA_VERSION
             || object.get("schemaVersion").getAsDouble() != version)
         {
             throw new IllegalArgumentException("Unsupported history schema");
@@ -62,11 +62,12 @@ final class HistoryValidator
             {
                 throw new IllegalArgumentException("Missing task name");
             }
+            if (stats.getTimingPolicy() < 0 || stats.getTimingPolicy() > 1) { throw new IllegalArgumentException("Unknown timing policy"); }
             validateText(stats.getTaskName());
             validateText(stats.getTaskLocation());
             validateText(stats.getEncounterProfileName());
             if (version >= 5 && !entry.getKey().equals(new com.slayerspeed.model.TaskKey(
-                stats.getTaskName(), stats.getTaskLocation(), stats.getEncounterProfileId()).asStorageKey()))
+                stats.getTaskName(), stats.getTaskLocation(), stats.getEncounterProfileId(), stats.getTimingPolicy()).asStorageKey()))
             {
                 throw new IllegalArgumentException("Task key does not match stored profile");
             }
@@ -78,9 +79,13 @@ final class HistoryValidator
                 {
                     throw new IllegalArgumentException("Invalid or duplicate task run");
                 }
-                if ((long) run.getKillSlayerXp() + run.getBonusSlayerXp() > Integer.MAX_VALUE)
+                if (run.getTimingPolicy() != stats.getTimingPolicy()) { throw new IllegalArgumentException("Mixed timing policy"); }
+                if (run.getRateTaskProgressUnits() > run.getTaskProgressUnits()
+                    || run.getRateActualKills() > run.getActualKills()
+                    || (long) run.getKillSlayerXp() + run.getBonusSlayerXp() > Integer.MAX_VALUE
+                    || run.getRateSlayerXp() > run.getTotalSlayerXp())
                 {
-                    throw new IllegalArgumentException("XP exceeds its storage range");
+                    throw new IllegalArgumentException("Rate sample exceeds observed counters");
                 }
                 validateText(run.getTaskName());
                 validateText(run.getTaskLocation());
@@ -100,7 +105,11 @@ final class HistoryValidator
         {
             if (active.getTaskName() == null || active.getTaskName().trim().isEmpty()
                 || active.getId() == null || active.getId().isEmpty() || ids.contains(active.getId())
-                || (long) active.getKillSlayerXp() + active.getBonusSlayerXp() > Integer.MAX_VALUE)
+                || active.getTimingPolicy() < 0 || active.getTimingPolicy() > 1
+                || active.getRateTaskProgressUnits() > active.getTaskProgressUnits()
+                || active.getRateActualKills() > active.getActualKills()
+                || (long) active.getKillSlayerXp() + active.getBonusSlayerXp() > Integer.MAX_VALUE
+                || active.getRateSlayerXp() > active.getTotalSlayerXp())
             {
                 throw new IllegalArgumentException("Invalid active task");
             }
@@ -127,14 +136,6 @@ final class HistoryValidator
             for (Map.Entry<String, JsonElement> entry : element.getAsJsonObject().entrySet())
             {
                 JsonElement value = entry.getValue();
-                // Development schema-6 history can return to schema 5 only when no
-                // experimental samples would be reinterpreted or discarded.
-                if ("timingPolicy".equals(entry.getKey())
-                    && (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
-                        || value.getAsBigDecimal().compareTo(BigDecimal.ZERO) != 0))
-                {
-                    throw new IllegalArgumentException("Experimental timing history requires the timing branch");
-                }
                 boolean integerField = INTEGER_FIELDS.contains(entry.getKey());
                 boolean longField = LONG_FIELDS.contains(entry.getKey());
                 boolean decimalField = DECIMAL_FIELD.equals(entry.getKey());

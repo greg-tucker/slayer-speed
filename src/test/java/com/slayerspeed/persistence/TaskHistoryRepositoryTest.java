@@ -94,7 +94,7 @@ public class TaskHistoryRepositoryTest
 		statistics.addRun(run("old", null, 100), 50);
 		current.getStatisticsByTaskKey().put(new TaskKey("Gargoyles", null).asStorageKey(), statistics);
 
-		String versionOneJson = repository.encode(current).replace("\"schemaVersion\":5", "\"schemaVersion\":1");
+		String versionOneJson = repository.encode(current).replace("\"schemaVersion\":6", "\"schemaVersion\":1");
 		SlayerSpeedData versionOne = repository.decode(versionOneJson);
 
 		assertEquals(true, versionOne.migrateToCurrentSchema());
@@ -114,7 +114,7 @@ public class TaskHistoryRepositoryTest
 		statistics.addRun(run, 50);
 		current.getStatisticsByTaskKey().put("gargoyles", statistics);
 
-		String versionTwoJson = repository.encode(current).replace("\"schemaVersion\":5", "\"schemaVersion\":2");
+		String versionTwoJson = repository.encode(current).replace("\"schemaVersion\":6", "\"schemaVersion\":2");
 		SlayerSpeedData versionTwo = repository.decode(versionTwoJson);
 
 		assertEquals(true, versionTwo.migrateToCurrentSchema());
@@ -128,7 +128,7 @@ public class TaskHistoryRepositoryTest
 		TaskHistoryRepository repository = new TaskHistoryRepository(null, new Gson());
 		SlayerSpeedData current = new SlayerSpeedData();
 		String versionThreeJson = repository.encode(current)
-			.replace("\"schemaVersion\":5", "\"schemaVersion\":3");
+			.replace("\"schemaVersion\":6", "\"schemaVersion\":3");
 
 		SlayerSpeedData versionThree = repository.decode(versionThreeJson);
 
@@ -162,7 +162,7 @@ public class TaskHistoryRepositoryTest
 		statistics.addRun(run("old", null, 100), 50);
 		current.getStatisticsByTaskKey().put("araxytes", statistics);
 		String versionFourJson = repository.encode(current)
-			.replace("\"schemaVersion\":5", "\"schemaVersion\":4")
+			.replace("\"schemaVersion\":6", "\"schemaVersion\":4")
 			.replace(",\"encounterProfileId\":\"\"", "")
 			.replace(",\"encounterProfileName\":\"Older mixed data\"", "");
 

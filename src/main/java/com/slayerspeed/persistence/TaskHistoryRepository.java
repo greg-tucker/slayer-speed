@@ -262,7 +262,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 				run.getTaskName(),
 				run.getTaskLocation(),
 				run.getEncounterProfileId(),
-				run.getEncounterProfileName()));
+				run.getEncounterProfileName(), run.getTimingPolicy()));
 		statistics.addRun(run, maximumRecentRuns);
 		data.setCheckpointedActiveTask(null);
 		save();
@@ -300,7 +300,8 @@ public class TaskHistoryRepository implements TaskHistoryStore
 		{
 			TaskKey statisticsKey = taskKey(statistics, false);
 			if (statisticsKey.getTaskName().equals(key.getTaskName())
-				&& statisticsKey.getEncounterProfileId().equals(key.getEncounterProfileId()))
+				&& statisticsKey.getEncounterProfileId().equals(key.getEncounterProfileId())
+                && statisticsKey.getTimingPolicy() == key.getTimingPolicy())
 			{
 				if (combined == null)
 				{
@@ -308,7 +309,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 						statistics.getTaskName(),
 						null,
 						statistics.getEncounterProfileId(),
-						statistics.getEncounterProfileName());
+						statistics.getEncounterProfileName(), statistics.getTimingPolicy());
 				}
 				combined.merge(statistics);
 			}
@@ -333,7 +334,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 				else
 				{
 					TaskKey profileKey = new TaskKey(
-						statistics.getTaskName(), null, statistics.getEncounterProfileId());
+						statistics.getTaskName(), null, statistics.getEncounterProfileId(), statistics.getTimingPolicy());
 					TaskStatistics combined = null;
 					for (TaskStatistics existing : result)
 					{
@@ -347,7 +348,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 					{
 						combined = new TaskStatistics(
 							statistics.getTaskName(), null,
-							statistics.getEncounterProfileId(), statistics.getEncounterProfileName());
+							statistics.getEncounterProfileId(), statistics.getEncounterProfileName(), statistics.getTimingPolicy());
 						result.add(combined);
 					}
 					combined.merge(statistics);
@@ -375,7 +376,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 				TaskStatistics combined = combinedByTask.computeIfAbsent(
 					taskKey.asStorageKey(), ignored -> new TaskStatistics(
 						statistics.getTaskName(), null,
-						statistics.getEncounterProfileId(), statistics.getEncounterProfileName()));
+						statistics.getEncounterProfileId(), statistics.getEncounterProfileName(), statistics.getTimingPolicy()));
 				combined.merge(statistics);
 			}
 			result = new ArrayList<>(combinedByTask.values());
@@ -421,7 +422,7 @@ public class TaskHistoryRepository implements TaskHistoryStore
 		return new TaskKey(
 			statistics.getTaskName(),
 			separateByLocation ? statistics.getTaskLocation() : null,
-			statistics.getEncounterProfileId());
+			statistics.getEncounterProfileId(), statistics.getTimingPolicy());
 	}
 
 	public void setRunExcluded(TaskRun run, boolean excluded)
